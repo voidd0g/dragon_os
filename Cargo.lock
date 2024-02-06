@@ -3,11 +3,20 @@
 version = 3
 
 [[package]]
-name = "dragon_os"
+name = "common"
+version = "0.1.0"
+
+[[package]]
+name = "dragon_os_boot_loader"
 version = "0.1.0"
 dependencies = [
+ "common",
  "utf16_literal",
 ]
+
+[[package]]
+name = "kernel"
+version = "0.1.0"
 
 [[package]]
 name = "utf16_literal"
