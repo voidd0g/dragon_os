@@ -1,0 +1,4 @@
+pub mod efi_simple_text_input_protocol;
+pub mod efi_simple_text_input_ex_protocol;
+pub mod efi_simple_text_output_protocol;
+pub mod efi_device_path_protocol;

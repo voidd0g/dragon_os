@@ -1,7 +1,3 @@
-use super::common_types::{UINT64, UINTN};
-
-pub type EFI_TPL = UINTN;
-
 #[repr(C)]
 pub enum EFI_ALLOCATE_TYPE {
     AllocateAnyPages,
@@ -31,5 +27,21 @@ pub enum EFI_MEMORY_TYPE {
     EfiMaxMemoryType,
 }
 
-pub type EFI_PHYSICAL_ADDRESS = UINT64;
-pub type EFI_VIRTUAL_ADDRESS = UINT64;
+#[repr(C)]
+pub enum EFI_TIMER_DELAY {
+    TimerCancel,
+    TimerPeriodic,
+    TimerRelative,
+}
+
+#[repr(C)]
+pub enum EFI_INTERFACE_TYPE {
+    EFI_NATIVE_INTERFACE,
+}
+
+#[repr(C)]
+pub enum EFI_LOCATE_SEARCH_TYPE {
+    AllHandles,
+    ByRegisterNotify,
+    ByProtocol,
+}

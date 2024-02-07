@@ -1,4 +1,4 @@
-use crate::uefi::data_types::common_types::{BOOLEAN, CHAR16, EFI_STATUS};
+use crate::uefi::data_types::common_types::{BOOLEAN, CHAR16, EFI_GUID, EFI_STATUS, UINT64};
 
 type EFI_TEXT_RESET = extern "C" fn (This: *const EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, ExtendedVerification: BOOLEAN) -> EFI_STATUS;
 type EFI_TEXT_STRING = extern "C" fn (This: *const EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, String: *const CHAR16) -> EFI_STATUS;
@@ -9,14 +9,14 @@ type EFI_TEXT_STRING = extern "C" fn (This: *const EFI_SIMPLE_TEXT_OUTPUT_PROTOC
 pub struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
     Reset: EFI_TEXT_RESET,
     OutputString: EFI_TEXT_STRING,
-    _Unuse0: u64,
-    _Unuse1: u64,
-    _Unuse2: u64,
-    _Unuse3: u64,
-    _Unuse4: u64,
-    _Unuse5: u64,
-    _Unuse6: u64,
-    _Unuse7: u64,
+    _Unuse0: UINT64,
+    _Unuse1: UINT64,
+    _Unuse2: UINT64,
+    _Unuse3: UINT64,
+    _Unuse4: UINT64,
+    _Unuse5: UINT64,
+    _Unuse6: UINT64,
+    _Unuse7: UINT64,
 }
 
 #[deny(non_snake_case)]
@@ -29,3 +29,5 @@ impl EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
         (self.OutputString)(self, string.as_ptr())
     }
 }
+
+pub const EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_GUID: EFI_GUID = EFI_GUID::new(0x387477c2, 0x69c7, 0x11d2, [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]);
