@@ -1,5 +1,5 @@
 [build]
-target = "./x86_64_dragon-uefi.json"
+target = "./rust_target_dragon.json"
 rustflags = ["-C", "link-args=/debug:dwarf"]
 
 [unstable]

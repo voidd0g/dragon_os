@@ -1,6 +1,6 @@
 use self::{efi_boot_services::EFI_BOOT_SERVICES, efi_configuration_table::EFI_CONFIGURATION_TABLE, efi_runtime_services::EFI_RUNTIME_SERVICES, efi_simple_text_input_protocol::EFI_SIMPLE_TEXT_INPUT_PROTOCOL, efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, efi_table_header::EFI_TABLE_HEADER};
 
-use super::data_types::{CHAR16, EFI_HANDLE, UINT32, UINTN};
+use super::data_types::common_types::{CHAR16, EFI_HANDLE, UINT32, UINTN};
 
 pub mod efi_table_header;
 pub mod efi_simple_text_output_protocol;
@@ -11,6 +11,8 @@ pub mod efi_boot_services;
 pub mod efi_configuration_table;
 pub mod efi_memory_descriptor;
 
+/// Documentation is on: 
+/// https://uefi.org/specs/UEFI/2.10/04_EFI_System_Table.html#id6
 #[repr(C)]
 pub struct SystemTable {
     Hdr:                    EFI_TABLE_HEADER,

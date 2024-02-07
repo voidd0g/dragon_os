@@ -1,5 +1,8 @@
-use crate::uefi::data_types::{EFI_PHYSICAL_ADDRESS, EFI_VIRTUAL_ADDRESS, UINT32, UINT64};
+use crate::uefi::data_types::{common_types::{UINT32, UINT64}, other_types::{EFI_PHYSICAL_ADDRESS, EFI_VIRTUAL_ADDRESS}};
 
+/// Documentation is on: 
+/// https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-getmemorymap
+/// "Related Definitions"
 #[repr(C)]
 pub struct EFI_MEMORY_DESCRIPTOR {
 	Type: UINT32,

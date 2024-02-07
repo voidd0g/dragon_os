@@ -1,5 +1,10 @@
-use crate::uefi::{data_types::{CHAR16, EFI_STATUS}, function_types::{EFI_TEXT_RESET, EFI_TEXT_STRING}};
+use crate::uefi::data_types::common_types::{BOOLEAN, CHAR16, EFI_STATUS};
 
+type EFI_TEXT_RESET = extern "C" fn (This: *const EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, ExtendedVerification: BOOLEAN) -> EFI_STATUS;
+type EFI_TEXT_STRING = extern "C" fn (This: *const EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL, String: *const CHAR16) -> EFI_STATUS;
+
+/// Documentation is on: 
+/// https://uefi.org/specs/UEFI/2.10/12_Protocols_Console_Support.html#efi-simple-text-output-protocol
 #[repr(C)]
 pub struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
     Reset: EFI_TEXT_RESET,
