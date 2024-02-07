@@ -9,6 +9,7 @@ pub mod efi_simple_text_input_ex_protocol;
 pub mod efi_runtime_services;
 pub mod efi_boot_services;
 pub mod efi_configuration_table;
+pub mod efi_memory_descriptor;
 
 #[repr(C)]
 pub struct SystemTable {
@@ -27,14 +28,15 @@ pub struct SystemTable {
     EConfigurationTable:    *mut EFI_CONFIGURATION_TABLE,
 }
 
+#[deny(non_snake_case)]
 impl SystemTable {
-    pub fn ConOut(&self) -> &mut EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
+    pub fn con_out(&self) -> &mut EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
         unsafe { 
 			&mut *self.ConOut 
 		}
     }
 
-	pub fn BootServices(&self) -> &mut EFI_BOOT_SERVICES {
+	pub fn boot_services(&self) -> &mut EFI_BOOT_SERVICES {
 		unsafe {
 			&mut *self.BootServices
 		}

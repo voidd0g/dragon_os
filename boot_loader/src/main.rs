@@ -6,14 +6,18 @@ use common::uefi::{data_types::{EFI_HANDLE, EFI_STATUS}, system_table::SystemTab
 use utf16_literal::utf16;
 
 #[no_mangle]
-pub extern "C" fn efi_main(ImageHandle: EFI_HANDLE, SystemTable: &SystemTable) -> EFI_STATUS {
-    let cout = SystemTable.ConOut();
-    _ = cout.Reset(false);
-    _ = cout.OutputString(utf16!("Hello World\r\na\nb\rc\nd\r\n").as_ptr());
+pub extern "C" fn efi_main(image_handle: EFI_HANDLE, system_table: &SystemTable) -> EFI_STATUS {
+    let cout = system_table.con_out();
+    match cout.reset(false) {
+        EFI_STATUS::Success => (),
+        e => return e,
+    }
+    match cout.output_string(utf16!("Hello World\r\na\nb\rc\nd\r\n")) {
+        EFI_STATUS::Success => (),
+        e => return e,
+    }
 
     loop{}
-
-    EFI_STATUS::Success
 }
 
 #[panic_handler]
