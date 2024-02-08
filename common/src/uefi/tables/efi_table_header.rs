@@ -1,4 +1,4 @@
-use crate::uefi::data_types::common_types::{UINT32, UINT64};
+use crate::uefi::data_types::basic_types::{UINT32, UINT64};
 
 /// Documentation is on: 
 /// https://uefi.org/specs/UEFI/2.10/04_EFI_System_Table.html#id4

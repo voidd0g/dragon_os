@@ -1,6 +1,6 @@
-use core::ptr::null;
+use core::ptr::null_mut;
 
-use crate::uefi::{data_types::{common_types::{BOOLEAN, CHAR16, C_VARIABLE_ARGUMENT, EFI_EVENT, EFI_GUID, EFI_HANDLE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, EFI_TPL, UINT32, UINT64, UINT8, UINTN, VOID}, enums::{EFI_ALLOCATE_TYPE, EFI_INTERFACE_TYPE, EFI_LOCATE_SEARCH_TYPE, EFI_MEMORY_TYPE, EFI_TIMER_DELAY}, structs::{efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR, efi_open_protocol_information_entry::EFI_OPEN_PROTOCOL_INFORMATION_ENTRY}}, protocols::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL};
+use crate::uefi::{data_types::{basic_types::{BOOLEAN, CHAR16, C_VARIABLE_ARGUMENT, EFI_ALLOCATE_TYPE, EFI_EVENT, EFI_GUID, EFI_HANDLE, EFI_INTERFACE_TYPE, EFI_LOCATE_SEARCH_TYPE, EFI_MEMORY_TYPE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, EFI_TIMER_DELAY, EFI_TPL, UINT32, UINT64, UINT8, UINTN, VOID}, structs::{efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR, efi_open_protocol_information_entry::EFI_OPEN_PROTOCOL_INFORMATION_ENTRY}}, protocols::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL};
 
 use super::efi_table_header::EFI_TABLE_HEADER;
 
@@ -124,58 +124,14 @@ pub struct EFI_BOOT_SERVICES {
 
 #[deny(non_snake_case)]
 impl EFI_BOOT_SERVICES {
-    pub fn raise_tpl(&self, new_tpl: EFI_TPL) -> EFI_TPL {
-        (self.RaiseTPL)(new_tpl)
-    }
-    pub fn restore_tpl(&self, old_tpl: EFI_TPL) {
-        _ = (self.RestoreTPL)(old_tpl)
-    }
-
-	pub fn allocate_pages(&self, r#type: EFI_ALLOCATE_TYPE, memory_type: EFI_MEMORY_TYPE, pages: UINTN, memory_in_out: &mut EFI_PHYSICAL_ADDRESS) -> EFI_STATUS {
-		(self.AllocatePages)(r#type, memory_type, pages, memory_in_out)
-	}
-	pub fn free_pages(&self, memory: EFI_PHYSICAL_ADDRESS, pages: UINTN) -> EFI_STATUS {
-		(self.FreePages)(memory, pages)
-	}
 	pub fn get_memory_map(&self, memory_map_size_in_out: &mut UINTN, memory_map_out: &mut[UINT8], map_key_out: &mut UINTN, descriptor_size_out: &mut UINTN, descriptor_version_out: &mut UINT32) -> EFI_STATUS {
 		(self.GetMemoryMap)(memory_map_size_in_out, memory_map_out.as_ptr() as *mut EFI_MEMORY_DESCRIPTOR, map_key_out, descriptor_size_out, descriptor_version_out)
 	}
-	pub fn allocate_pool(&self, pool_type: EFI_MEMORY_TYPE, size: UINTN, buffer_out: &mut &VOID) -> EFI_STATUS {
-		(self.AllocatePool)(pool_type, size, &mut (*buffer_out as *const VOID) as *mut *const VOID)
-	}
-	pub fn free_pool(&self, buffer: &VOID) -> EFI_STATUS {
-		(self.FreePool)(buffer)
-	}
 
-	pub fn create_event(&self, r#type: UINT32, notify_tpl: EFI_TPL, notify_function_optional: Option<EFI_EVENT_NOTIFY>, notify_context_optional: Option<&VOID>, event_out: &mut EFI_EVENT) -> EFI_STATUS {
-		(self.CreateEvent)(r#type, notify_tpl, notify_function_optional, match notify_context_optional {
-			Some(notify_context) => notify_context,
-			None => null(),
-		}, event_out)
-	}
-	pub fn set_timer(&self, event: EFI_EVENT, r#type: EFI_TIMER_DELAY, trigger_time: UINT64) -> EFI_STATUS {
-		(self.SetTimer)(event, r#type, trigger_time)
-	}
-	pub fn wait_for_event(&self, number_of_events: UINTN, event: &EFI_EVENT, index_out: &mut UINTN) -> EFI_STATUS {
-		(self.WaitForEvent)(number_of_events, event, index_out)
-	}
-	pub fn signal_event(&self, event: EFI_EVENT) -> EFI_STATUS {
-		(self.SignalEvent)(event)
-	}
-	pub fn close_event(&self, event: EFI_EVENT) -> EFI_STATUS {
-		(self.CloseEvent)(event)
-	}
-	pub fn check_event(&self, event: EFI_EVENT) -> EFI_STATUS {
-		(self.CheckEvent)(event)
-	}
-
-	pub fn install_protocol_interface(&self, handle_in_out: &mut EFI_HANDLE, protocol: &EFI_GUID, interface_type: EFI_INTERFACE_TYPE, interface: &VOID) -> EFI_STATUS {
-		(self.InstallProtocolInterface)(handle_in_out, protocol, interface_type, interface)
-	}
-	pub fn reinstall_protocol_interface(&self, handle: EFI_HANDLE, protocol: &EFI_GUID, old_interface: &VOID, new_interface: &VOID) -> EFI_STATUS {
-		(self.ReinstallProtocolInterface)(handle, protocol, old_interface, new_interface)
-	}
-	pub fn uninstall_protocol_interface(&self, handle: EFI_HANDLE, protocol: &EFI_GUID, interface: &VOID) -> EFI_STATUS {
-		(self.UninstallProtocolInterface)(handle, protocol, interface)
+	pub fn open_protocol(&self, handle: EFI_HANDLE, protocol: &EFI_GUID, interface_out_optional: Option<&mut[UINT8]>, agent_handle: EFI_HANDLE, controller_handle: EFI_HANDLE, attributes: UINT32) -> EFI_STATUS {
+		(self.OpenProtocol)(handle, protocol, match interface_out_optional {
+			Some(interface_out) => &mut (interface_out.as_mut_ptr() as *const VOID) as *mut *const VOID,
+			None => null_mut(),
+		}, agent_handle, controller_handle, attributes)
 	}
 }

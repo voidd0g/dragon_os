@@ -1,4 +1,4 @@
-use crate::uefi::{data_types::common_types::{CHAR16, EFI_HANDLE, UINT32, UINTN}, protocols::{efi_simple_text_input_protocol::EFI_SIMPLE_TEXT_INPUT_PROTOCOL, efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL}};
+use crate::uefi::{data_types::basic_types::{CHAR16, EFI_HANDLE, UINT32, UINTN}, protocols::{efi_simple_text_input_protocol::EFI_SIMPLE_TEXT_INPUT_PROTOCOL, efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL}};
 
 use super::{efi_boot_services::EFI_BOOT_SERVICES, efi_configuration_table::EFI_CONFIGURATION_TABLE, efi_runtime_services::EFI_RUNTIME_SERVICES, efi_table_header::EFI_TABLE_HEADER};
 

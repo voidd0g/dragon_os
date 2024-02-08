@@ -1,4 +1,4 @@
-use crate::uefi::data_types::common_types::{EFI_HANDLE, UINT32};
+use crate::uefi::data_types::basic_types::{EFI_HANDLE, UINT32};
 
 #[repr(C)]
 pub struct EFI_OPEN_PROTOCOL_INFORMATION_ENTRY {
