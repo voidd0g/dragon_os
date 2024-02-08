@@ -1,6 +1,8 @@
 use core::ptr::null;
 
-use crate::uefi::{data_types::{common_types::{BOOLEAN, CHAR16, C_VARIABLE_ARGUMENT, EFI_EVENT, EFI_GUID, EFI_HANDLE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, EFI_TPL, UINT32, UINT64, UINT8, UINTN, VOID}, enums::{EFI_ALLOCATE_TYPE, EFI_INTERFACE_TYPE, EFI_LOCATE_SEARCH_TYPE, EFI_MEMORY_TYPE, EFI_TIMER_DELAY}, structs::{EFI_MEMORY_DESCRIPTOR, EFI_OPEN_PROTOCOL_INFORMATION_ENTRY}}, protocols::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL, tables::efi_table_header::EFI_TABLE_HEADER};
+use crate::uefi::{data_types::{common_types::{BOOLEAN, CHAR16, C_VARIABLE_ARGUMENT, EFI_EVENT, EFI_GUID, EFI_HANDLE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, EFI_TPL, UINT32, UINT64, UINT8, UINTN, VOID}, enums::{EFI_ALLOCATE_TYPE, EFI_INTERFACE_TYPE, EFI_LOCATE_SEARCH_TYPE, EFI_MEMORY_TYPE, EFI_TIMER_DELAY}, structs::{efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR, efi_open_protocol_information_entry::EFI_OPEN_PROTOCOL_INFORMATION_ENTRY}}, protocols::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL};
+
+use super::efi_table_header::EFI_TABLE_HEADER;
 
 
 type EFI_RAISE_TPL = extern "C" fn (NewTpl: EFI_TPL) -> EFI_TPL;
@@ -135,8 +137,8 @@ impl EFI_BOOT_SERVICES {
 	pub fn free_pages(&self, memory: EFI_PHYSICAL_ADDRESS, pages: UINTN) -> EFI_STATUS {
 		(self.FreePages)(memory, pages)
 	}
-	pub fn get_memory_map(&self, memory_map_size_in_out: &mut UINTN, memory_map_out: &mut EFI_MEMORY_DESCRIPTOR, map_key_out: &mut UINTN, descriptor_size_out: &mut UINTN, descriptor_version_out: &mut UINT32) -> EFI_STATUS {
-		(self.GetMemoryMap)(memory_map_size_in_out, memory_map_out, map_key_out, descriptor_size_out, descriptor_version_out)
+	pub fn get_memory_map(&self, memory_map_size_in_out: &mut UINTN, memory_map_out: &mut[UINT8], map_key_out: &mut UINTN, descriptor_size_out: &mut UINTN, descriptor_version_out: &mut UINT32) -> EFI_STATUS {
+		(self.GetMemoryMap)(memory_map_size_in_out, memory_map_out.as_ptr() as *mut EFI_MEMORY_DESCRIPTOR, map_key_out, descriptor_size_out, descriptor_version_out)
 	}
 	pub fn allocate_pool(&self, pool_type: EFI_MEMORY_TYPE, size: UINTN, buffer_out: &mut &VOID) -> EFI_STATUS {
 		(self.AllocatePool)(pool_type, size, &mut (*buffer_out as *const VOID) as *mut *const VOID)

@@ -1,0 +1,2 @@
+pub mod efi_memory_descriptor;
+pub mod efi_open_protocol_information_entry;

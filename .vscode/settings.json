@@ -8,4 +8,5 @@
         "--target",
         "./rust_target_dragon.json"
     ],
+    "rust-analyzer.showUnlinkedFileNotification": false,
 }
