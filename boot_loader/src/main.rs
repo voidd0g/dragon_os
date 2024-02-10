@@ -8,6 +8,7 @@ use utf16_literal::utf16;
 #[no_mangle]
 pub extern "C" fn efi_main(image_handle: EFI_HANDLE, system_table: &EFI_SYSTEM_TABLE) -> EFI_STATUS {
     let cout = system_table.con_out();
+    let boot_services = system_table.boot_services();
     match cout.reset(false) {
         EFI_SUCCESS => (),
         v => return v,
@@ -17,28 +18,70 @@ pub extern "C" fn efi_main(image_handle: EFI_HANDLE, system_table: &EFI_SYSTEM_T
         v => return v,
     }
 
+    match cout.output_string(utf16!("Get memory map\r\n")) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
     const MEMMAP_BUF_SIZE: UINTN = 4096 * 4;
     let mut memmap_buf = [0u8; MEMMAP_BUF_SIZE];
     let mut memmap = MemoryMap { buffer_size: MEMMAP_BUF_SIZE, memory_map_buffer: &mut memmap_buf, map_size: MEMMAP_BUF_SIZE, map_key: 0, descriptor_size: 0, descriptor_version: 0 };
-    let boot_services = system_table.boot_services();
     match boot_services.get_memory_map(&mut memmap.map_size, memmap.memory_map_buffer, &mut memmap.map_key, &mut memmap.descriptor_size, &mut memmap.descriptor_version) {
         EFI_SUCCESS => (),
         v => return v,
     }
 
+    match cout.output_string(utf16!("Open root dir\r\n")) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
     let root_dir = match open_root_dir(image_handle, boot_services) {
         Ok(root_dir) => root_dir,
         Err(v) => return v,
     };
 
-    root_dir.open(&mut root_dir, utf16!("memmap"), EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
+    match cout.output_string(utf16!("Open memmap file\r\n")) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
+    let mut memmap_file_buffer = [0u8; size_of::<EFI_FILE_PROTOCOL>()];
+    match root_dir.open(&mut memmap_file_buffer, utf16!("memmap"), EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
+    let (memmap_file, _) = EFI_FILE_PROTOCOL::from_byte_slice(&memmap_file_buffer);
 
+    match cout.output_string(utf16!("Close memmap file\r\n")) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
+    match memmap_file.close() {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
+
+    match cout.output_string(utf16!("All done\r\n")) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
     loop{}
 }
 
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
     loop{}
+}
+
+fn save_memory_map(memmap: &MemoryMap, dest_file: &EFI_FILE_PROTOCOL) -> EFI_STATUS {
+    let header = "Index, Type, Type(name), PhysicalStart, NumberOfPages, Attribute\n".as_bytes();
+    let mut header_len = header.len();
+    match dest_file.write(&mut header_len, header) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
+    match cout.output_string(utf16!("map->buffer = \r\n", )) {
+        EFI_SUCCESS => (),
+        v => return v,
+    }
 }
 
 fn open_root_dir(image_handle: EFI_HANDLE, boot_services: &EFI_BOOT_SERVICES) -> Result<EFI_FILE_PROTOCOL, EFI_STATUS> {

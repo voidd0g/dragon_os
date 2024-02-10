@@ -36,11 +36,16 @@ pub struct EFI_FILE_PROTOCOL {
 
 #[deny(non_snake_case)]
 impl EFI_FILE_PROTOCOL {
-    pub fn open(&self, new_handle_out: &mut EFI_FILE_PROTOCOL, file_name: &[CHAR16], open_mode: UINT64, attributes: UINT64) -> EFI_STATUS {
-        (self.Open)(self, &mut (new_handle_out as *const EFI_FILE_PROTOCOL) as *mut *const EFI_FILE_PROTOCOL, file_name.as_ptr(), open_mode, attributes)
+
+    pub fn open(&self, new_handle_out: &mut[UINT8], file_name: &[CHAR16], open_mode: UINT64, attributes: UINT64) -> EFI_STATUS {
+        (self.Open)(self, &mut (new_handle_out.as_mut_ptr() as *const EFI_FILE_PROTOCOL) as *mut *const EFI_FILE_PROTOCOL, file_name.as_ptr(), open_mode, attributes)
     }
     pub fn close(&self) -> EFI_STATUS {
         (self.Close)(self)
+    }
+
+    pub fn write(&self, buffer_size_in_out: &mut UINTN, buffer: &[UINT8]) -> EFI_STATUS {
+        (self.Write)(self, buffer_size_in_out, buffer.as_ptr() as *const VOID)
     }
 }
 
