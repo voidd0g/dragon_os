@@ -1,8 +1,10 @@
+use core::ptr::null;
+
 use crate::{uefi::data_types::basic_types::{EFI_STATUS, UINT64, UINT8}, utils::from_byte_slice::FromByteSlice};
 
 use super::efi_file_protocol::EFI_FILE_PROTOCOL;
 
-type EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_OPEN_VOLUME = extern "C" fn (This: *const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL, RootOut: *mut *const EFI_FILE_PROTOCOL) -> EFI_STATUS;
+type EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_OPEN_VOLUME = unsafe extern "efiapi" fn (This: *const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL, RootOut: *mut *const EFI_FILE_PROTOCOL) -> EFI_STATUS;
 
 #[repr(C)]
 pub struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL { 
@@ -12,8 +14,14 @@ pub struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 
 #[deny(non_snake_case)]
 impl EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
-    pub fn open_volume(&self, root_out: &mut[UINT8]) -> EFI_STATUS {
-        (self.OpenVolume)(self, &mut (root_out.as_mut_ptr() as *const EFI_FILE_PROTOCOL) as *mut *const EFI_FILE_PROTOCOL)
+    pub fn open_volume(&self) -> (EFI_STATUS, &EFI_FILE_PROTOCOL) {
+        let mut root_out = null();
+        let status = unsafe {
+            (self.OpenVolume)(self, &mut root_out)
+        };
+        (status, unsafe {
+            root_out.as_ref()
+        }.unwrap())
     }
 }
 

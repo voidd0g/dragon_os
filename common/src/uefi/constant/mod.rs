@@ -13,3 +13,5 @@ pub mod efi_timer_delay;
 pub mod efi_interface_type;
 pub mod efi_locate_search_type;
 pub mod efi_open_protocol;
+pub mod efi_memory_attribute;
+pub mod efi_memory_descriptor_version;

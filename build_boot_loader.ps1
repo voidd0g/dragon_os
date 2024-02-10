@@ -19,9 +19,9 @@ if (!(Test-Path ($driveLetter + ":\EFI\BOOT"))) {
 	New-Item -Path ($driveLetter + ":\EFI") -Name "BOOT" -ItemType "directory"
 }
 if ($Debug) {
-	Copy-Item ".\target\x86_64_dragon-uefi\debug\dragon_os_boot_loader.efi" -Recurse -Destination ($driveLetter + ":\EFI\BOOT\BOOTX64.EFI")
+	Copy-Item ".\target\rust_target_dragon\debug\dragon_os_boot_loader.efi" -Recurse -Destination ($driveLetter + ":\EFI\BOOT\BOOTX64.EFI")
 } else {
-	Copy-Item ".\target\x86_64_dragon-uefi\release\dragon_os_boot_loader.efi" -Recurse -Destination ($driveLetter + ":\EFI\BOOT\BOOTX64.EFI")
+	Copy-Item ".\target\rust_target_dragon\release\dragon_os_boot_loader.efi" -Recurse -Destination ($driveLetter + ":\EFI\BOOT\BOOTX64.EFI")
 }
 
 DisMount-DiskImage $C_VDISK_FILE
