@@ -1,4 +1,4 @@
-use core::ptr::{null, null_mut};
+use core::{ptr::{null, null_mut}, slice};
 
 use crate::uefi::{data_types::{basic_types::{BOOLEAN, CHAR16, C_VARIABLE_ARGUMENT, EFI_ALLOCATE_TYPE, EFI_EVENT, EFI_GUID, EFI_HANDLE, EFI_INTERFACE_TYPE, EFI_LOCATE_SEARCH_TYPE, EFI_MEMORY_TYPE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, EFI_TIMER_DELAY, EFI_TPL, UINT32, UINT64, UINT8, UINTN, VOID}, structs::{efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR, efi_open_protocol_information_entry::EFI_OPEN_PROTOCOL_INFORMATION_ENTRY}}, protocols::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL};
 
@@ -132,6 +132,21 @@ impl EFI_BOOT_SERVICES {
 			(self.GetMemoryMap)(memory_map_size_in_out, memory_map_out.as_ptr() as *mut EFI_MEMORY_DESCRIPTOR, &mut map_key_out, &mut descriptor_size_out, &mut descriptor_version_out)
 		};
 		(status, map_key_out, descriptor_size_out, descriptor_version_out)
+	}
+	pub fn allocate_pool(&self, pool_type: EFI_MEMORY_TYPE, size: UINTN) -> (EFI_STATUS, &mut[UINT8]) {
+		let mut buffer = null();
+		let status = unsafe {
+			(self.AllocatePool)(pool_type, size, &mut buffer)
+		};
+		(status, unsafe {
+			slice::from_raw_parts_mut(buffer as *mut UINT8, size)
+		})
+	}
+	pub fn free_pool(&self, buffer: &[UINT8]) -> EFI_STATUS {
+		let status = unsafe {
+			(self.FreePool)(buffer.as_ptr() as *const VOID)
+		};
+		status
 	}
 
 	pub fn open_protocol<T>(&self, handle: EFI_HANDLE, protocol: &EFI_GUID, interface_optional: Option<()>, agent_handle: EFI_HANDLE, controller_handle: EFI_HANDLE, attributes: UINT32) -> (EFI_STATUS, Option<&T>) {

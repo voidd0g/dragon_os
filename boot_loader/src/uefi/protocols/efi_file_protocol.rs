@@ -1,6 +1,6 @@
 use core::ptr::null;
 
-use crate::{uefi::data_types::{basic_types::{CHAR16, EFI_GUID, EFI_STATUS, UINT64, UINT8, UINTN, VOID}, structs::efi_file_io_token::EFI_FILE_IO_TOKEN}, utils::from_byte_slice::FromByteSlice};
+use crate::uefi::data_types::{basic_types::{CHAR16, EFI_GUID, EFI_STATUS, UINT64, UINT8, UINTN, VOID}, structs::efi_file_io_token::EFI_FILE_IO_TOKEN};
 
 type EFI_FILE_OPEN = unsafe extern "efiapi" fn (This: *const EFI_FILE_PROTOCOL, NewHandleOut: *mut *const EFI_FILE_PROTOCOL, FileName: *const CHAR16, OpenMode: UINT64, Attributes: UINT64) -> EFI_STATUS;
 type EFI_FILE_CLOSE = unsafe extern "efiapi" fn (This: *const EFI_FILE_PROTOCOL) -> EFI_STATUS;
@@ -60,44 +60,5 @@ impl EFI_FILE_PROTOCOL {
             (self.Write)(self, buffer_size_in_out, buffer.as_ptr() as *const VOID)
         };
         status
-    }
-}
-
-#[deny(non_snake_case)]
-impl FromByteSlice for EFI_FILE_PROTOCOL {
-    fn from_byte_slice(bs: &[UINT8]) -> (Self, &[UINT8]) where Self: Sized {
-        let (revision, bs) = UINT64::from_byte_slice(bs);
-        let (open, bs) = <*const EFI_FILE_OPEN>::from_byte_slice(bs);
-        let (cloase, bs) = <*const EFI_FILE_CLOSE>::from_byte_slice(bs);
-        let (delete, bs) = <*const EFI_FILE_DELETE>::from_byte_slice(bs);
-        let (read, bs) = <*const EFI_FILE_READ>::from_byte_slice(bs);
-        let (write, bs) = <*const EFI_FILE_WRITE>::from_byte_slice(bs);
-        let (get_position, bs) = <*const EFI_FILE_GET_POSITION>::from_byte_slice(bs);
-        let (set_position, bs) = <*const EFI_FILE_SET_POSITION>::from_byte_slice(bs);
-        let (get_info, bs) = <*const EFI_FILE_GET_INFO>::from_byte_slice(bs);
-        let (set_info, bs) = <*const EFI_FILE_SET_INFO>::from_byte_slice(bs);
-        let (flush, bs) = <*const EFI_FILE_FLUSH>::from_byte_slice(bs);
-        let (open_ex, bs) = <*const EFI_FILE_OPEN_EX>::from_byte_slice(bs);
-        let (read_ex, bs) = <*const EFI_FILE_READ_EX>::from_byte_slice(bs);
-        let (write_ex, bs) = <*const EFI_FILE_WRITE_EX>::from_byte_slice(bs);
-        let (flush_ex, bs) = <*const EFI_FILE_FLUSH_EX>::from_byte_slice(bs);
-
-        (Self { 
-            Revision: revision, 
-            Open: unsafe { open.read() }, 
-            Close: unsafe { cloase.read() }, 
-            Delete: unsafe { delete.read() }, 
-            Read: unsafe { read.read() }, 
-            Write: unsafe { write.read() }, 
-            GetPosition: unsafe { get_position.read() }, 
-            SetPosition: unsafe { set_position.read() },
-            GetInfo: unsafe { get_info.read() }, 
-            SetInfo: unsafe { set_info.read() },
-            Flush: unsafe { flush.read() },
-            OpenEx: unsafe { open_ex.read() },
-            ReadEx: unsafe { read_ex.read() },
-            WriteEx: unsafe { write_ex.read() },
-            FlushEx: unsafe { flush_ex.read() },
-        }, bs)
     }
 }

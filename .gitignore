@@ -1,3 +1,4 @@
 /target
 dragon_os.vhdx
 *.avhdx
+*/target

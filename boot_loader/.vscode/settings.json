@@ -1,0 +1,12 @@
+{
+    "rust-analyzer.cargo.target": "./rust_target_dragon_boot_loader.json",
+    "rust-analyzer.check.overrideCommand": [
+        "cargo",
+        "check",
+        "--workspace",
+        "--message-format=json",
+        "--target",
+        "./rust_target_dragon_boot_loader.json"
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false,
+}

@@ -1,0 +1,25 @@
+use crate::uefi::data_types::basic_types::EFI_STATUS;
+
+pub const EFI_SUCCESS: EFI_STATUS = 0;
+pub const EFI_WARN_UNKNOWN_GLYPH: EFI_STATUS = 1;
+pub const EFI_LOAD_ERROR: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 1;
+pub const EFI_INVALID_PARAMETER: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 2;
+pub const EFI_UNSUPPORTED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 3;
+pub const EFI_BAD_BUFFER_SIZE: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 4;
+pub const EFI_BUFFER_TOO_SMALL: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 5;
+pub const EFI_NOT_READY: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 6;
+pub const EFI_DEVICE_ERROR: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 7;
+pub const EFI_WRITE_PROTECTED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 8;
+pub const EFI_OUT_OF_RESOURCES: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 9;
+pub const EFI_VOLUME_CORRUPTED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 10;
+pub const EFI_VOLUME_FULL: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 11;
+pub const EFI_NO_MEDIA: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 12;
+pub const EFI_MEDIA_CHANGED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 13;
+pub const EFI_NOT_FOUND: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 14;
+pub const EFI_ACCESS_DENIED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 15;
+pub const EFI_NO_RESPONSE: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 16;
+pub const EFI_NO_MAPPING: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 17;
+pub const EFI_TIMEOUT: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 18;
+pub const EFI_NOT_STARTED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 19;
+pub const EFI_ALREADY_STARTED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 20;
+pub const EFI_ABORTED: EFI_STATUS = (1 << (EFI_STATUS::BITS - 1)) + 21;

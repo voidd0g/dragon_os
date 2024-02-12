@@ -1,7 +1,0 @@
-[workspace]
-
-members = [
-	"common", 
-	"boot_loader", 
-	"kernel",
-]

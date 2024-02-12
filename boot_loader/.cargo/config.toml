@@ -1,0 +1,7 @@
+[build]
+target = "./rust_target_dragon_boot_loader.json"
+# rustflags = ["-C", "link-args=/debug:dwarf"]
+
+[unstable]
+build-std = ["core", "compiler_builtins", "alloc"]
+build-std-features = ["compiler-builtins-mem"]
