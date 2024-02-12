@@ -11,8 +11,9 @@
 	"pre-link-args": {
 		"ld.lld": [
 			"--entry=kernel_main",
-			"--image-base=0x100000",
-			"--static"
+			"--image-base=0x72A000",
+			"--static",
+			"-znorelro"
 		]
 	},
 	"panic-strategy": "abort",

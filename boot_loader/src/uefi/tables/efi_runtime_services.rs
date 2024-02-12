@@ -1,2 +1,2 @@
 #[repr(C)]
-pub struct EFI_RUNTIME_SERVICES { }
+pub struct EFI_RUNTIME_SERVICES {}
