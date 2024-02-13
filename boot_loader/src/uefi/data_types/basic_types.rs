@@ -41,6 +41,10 @@ pub type EFI_LOCATE_SEARCH_TYPE = UINT32;
 
 pub type C_VARIABLE_ARGUMENT = *const VOID;
 
+pub type EFI_GRAPHICS_PIXEL_FORMAT = UINT32;
+
+pub type EFI_GRAPHICS_OUTPUT_BLT_OPERATION = UINT32;
+
 #[repr(C)]
 pub struct EFI_GUID {
     Data1: UINT32,

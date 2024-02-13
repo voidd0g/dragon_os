@@ -336,6 +336,34 @@ impl EFI_BOOT_SERVICES {
         status
     }
 
+    pub fn locate_handle_buffer(
+        &self,
+        search_type: EFI_LOCATE_SEARCH_TYPE,
+        protocol_optional: Option<&EFI_GUID>,
+        search_key_optional: Option<&VOID>,
+    ) -> (EFI_STATUS, UINTN, &[EFI_HANDLE]) {
+        let mut no_handles = 0;
+        let mut buffer = null();
+        let status = unsafe {
+            (self.LocateHandleBuffer)(
+                search_type,
+                match protocol_optional {
+                    Some(protocol) => protocol,
+                    None => null(),
+                },
+                match search_key_optional {
+                    Some(search_key) => search_key,
+                    None => null(),
+                },
+                &mut no_handles,
+                &mut buffer,
+            )
+        };
+        (status, no_handles, unsafe {
+            slice::from_raw_parts(buffer, no_handles)
+        })
+    }
+
     pub fn exit_boot_services(&self, image_handle: EFI_HANDLE, map_key: UINTN) -> EFI_STATUS {
         let status = unsafe { (self.ExitBootServices)(image_handle, map_key) };
         status

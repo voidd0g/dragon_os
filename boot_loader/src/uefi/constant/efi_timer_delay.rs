@@ -1,5 +1,3 @@
-#![allow(non_upper_case_globals)]
-
 use crate::uefi::data_types::basic_types::EFI_TIMER_DELAY;
 
 pub const TimerCancel: EFI_TIMER_DELAY = 0;

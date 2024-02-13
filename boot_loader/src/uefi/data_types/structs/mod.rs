@@ -1,9 +1,13 @@
 pub mod efi_file_info;
 pub mod efi_file_io_token;
+pub mod efi_graphics_output_blt_pixel;
+pub mod efi_graphics_output_mode_information;
+pub mod efi_graphics_output_protocol_mode;
 pub mod efi_input_key;
 pub mod efi_key_data;
 pub mod efi_key_state;
 pub mod efi_memory_descriptor;
 pub mod efi_open_protocol_information_entry;
+pub mod efi_pixel_bitmask;
 pub mod efi_time;
 pub mod simple_text_output_mode;
