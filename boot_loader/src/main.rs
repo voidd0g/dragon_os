@@ -4,7 +4,7 @@
 mod to_string;
 mod uefi;
 
-use core::{mem::size_of, panic::PanicInfo, ptr::null_mut, slice};
+use core::{arch::asm, mem::size_of, panic::PanicInfo, ptr::null_mut, slice};
 use to_string::ToString;
 use uefi::{
     constant::{
@@ -204,34 +204,6 @@ pub extern "efiapi" fn efi_main(
         }
     };
 
-    match cout.output_string(utf16!("Draw with gop\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
-    let frame_buffer_mut = unsafe {
-        slice::from_raw_parts_mut(
-            gop.mode().frame_buffer_base() as *mut [UINT8; 4],
-            gop.mode().frame_buffer_size(),
-        )
-    };
-    let mut frame_buffer_mut_iter = frame_buffer_mut.iter_mut();
-    let mut i = 0;
-    'a: loop {
-        match frame_buffer_mut_iter.next() {
-            Some(pixel) => *pixel = [if i < 100000 { UINT8::MAX } else { 0 }, if i < 200000 { UINT8::MAX } else { 0 }, if i < 300000 { UINT8::MAX } else { 0 }, 0],
-            None => break 'a (),
-        }
-        i += 1;
-        if i == 300000 {
-            break 'a ();
-        }
-    }
-
     match cout.output_string(utf16!("Open kernel file\r\n\0")) {
         EFI_SUCCESS => (),
         v => {
@@ -353,16 +325,7 @@ pub extern "efiapi" fn efi_main(
         }
     };
 
-    match cout.output_string(utf16!("Free memmap buffer\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
-    let status = boot_services.free_pool(memmap.memory_map_buffer);
+    let status = boot_services.exit_boot_services(image_handle, memmap.map_key);
     match status {
         EFI_SUCCESS => (),
         v => {
@@ -373,24 +336,20 @@ pub extern "efiapi" fn efi_main(
         }
     }
 
-    // let status = boot_services.exit_boot_services(image_handle, memmap.map_key);
-    // match status {
-    //     EFI_SUCCESS => (),
-    //     v => {
-    //         let str = (v, 16u8).to_string(boot_services).unwrap();
-    //         cout.output_string(str);
-    //         free_string(str, boot_services);
-    //         end()
-    //     }
-    // }
-
-    // (unsafe { ((kernel_base_addr + 24) as *const extern "sysv64" fn() -> !).read() })();
+    // (unsafe { ((kernel_base_addr + 24) as *const extern "sysv64" fn(UINT64, UINTN) -> !).read() })(
+    //     gop.mode().frame_buffer_base(),
+    //     gop.mode().frame_buffer_size(),
+    // );
 
     end()
 }
 
 fn end() -> ! {
-    loop {}
+    loop {
+        unsafe {
+            asm!("hlt");
+        }
+    }
 }
 
 fn concat_string<'a>(
