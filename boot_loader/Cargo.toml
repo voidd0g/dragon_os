@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 utf16_literal = "0.2.1"
+common = { path = "../common" }
 
 [profile.dev]
 panic = "abort"

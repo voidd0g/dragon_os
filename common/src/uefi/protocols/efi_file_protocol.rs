@@ -1,8 +1,11 @@
 use core::ptr::null;
 
-use crate::uefi::data_types::{
-    basic_types::{CHAR16, EFI_GUID, EFI_STATUS, UINT64, UINT8, UINTN, VOID},
-    structs::efi_file_io_token::EFI_FILE_IO_TOKEN,
+use crate::uefi::{
+    constant::efi_status::EFI_SUCCESS,
+    data_types::{
+        basic_types::{CHAR16, EFI_GUID, EFI_STATUS, UINT64, UINT8, UINTN, VOID},
+        structs::efi_file_io_token::EFI_FILE_IO_TOKEN,
+    },
 };
 
 type EFI_FILE_OPEN = unsafe extern "efiapi" fn(
@@ -90,7 +93,7 @@ impl EFI_FILE_PROTOCOL {
         file_name: &[CHAR16],
         open_mode: UINT64,
         attributes: UINT64,
-    ) -> (EFI_STATUS, &EFI_FILE_PROTOCOL) {
+    ) -> Result<&EFI_FILE_PROTOCOL, EFI_STATUS> {
         let mut new_handle_out = null();
         let status = unsafe {
             (self.Open)(
@@ -101,7 +104,10 @@ impl EFI_FILE_PROTOCOL {
                 attributes,
             )
         };
-        (status, unsafe { new_handle_out.as_ref() }.unwrap())
+        match status {
+            EFI_SUCCESS => Ok(unsafe { new_handle_out.as_ref() }.unwrap()),
+            v => Err(v),
+        }
     }
     pub fn close(&self) -> EFI_STATUS {
         let status = unsafe { (self.Close)(self) };

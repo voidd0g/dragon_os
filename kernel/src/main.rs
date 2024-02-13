@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
-use core::{arch::asm, panic::PanicInfo};
+mod frame_buffer_config;
+
+use core::{arch::asm, panic::PanicInfo, slice};
 
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
@@ -18,7 +20,7 @@ pub extern "sysv64" fn kernel_main(frame_buffer_base: u64, frame_buffer_size: us
         match frame_buffer_mut_iter.next() {
             Some(pixel) => {
                 *pixel = [
-                    if i < 100000 { i % u8::MAX } else { 0 },
+                    if i < 100000 { (i % u8::MAX as usize) as u8 } else { 0 },
                     if i < 200000 { u8::MAX } else { 0 },
                     if i < 300000 { u8::MAX } else { 0 },
                     0,

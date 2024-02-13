@@ -1,6 +1,6 @@
 use core::slice;
 
-use crate::uefi::{
+use common::uefi::{
     constant::{efi_memory_type::EfiLoaderData, efi_status::EFI_SUCCESS},
     data_types::basic_types::{CHAR16, EFI_STATUS},
     tables::efi_boot_services::EFI_BOOT_SERVICES,
@@ -29,11 +29,10 @@ impl ToString for (u64, u8) {
                 break 'b ();
             }
         }
-        let (status, buf) = boot_services.allocate_pool(EfiLoaderData, len * 2);
-        match status {
-            EFI_SUCCESS => (),
-            v => return Err(v),
-        }
+        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+            Ok(buf) => buf,
+            Err(v) => return Err(v),
+        };
         let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
@@ -67,11 +66,10 @@ impl ToString for (usize, u8) {
                 break 'b ();
             }
         }
-        let (status, buf) = boot_services.allocate_pool(EfiLoaderData, len * 2);
-        match status {
-            EFI_SUCCESS => (),
-            v => return Err(v),
-        }
+        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+            Ok(buf) => buf,
+            Err(v) => return Err(v),
+        };
         let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
@@ -105,11 +103,10 @@ impl ToString for (u32, u8) {
                 break 'b ();
             }
         }
-        let (status, buf) = boot_services.allocate_pool(EfiLoaderData, len * 2);
-        match status {
-            EFI_SUCCESS => (),
-            v => return Err(v),
-        }
+        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+            Ok(buf) => buf,
+            Err(v) => return Err(v),
+        };
         let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
@@ -143,11 +140,10 @@ impl ToString for (i32, u8) {
                 break 'b ();
             }
         }
-        let (status, buf) = boot_services.allocate_pool(EfiLoaderData, len * 2);
-        match status {
-            EFI_SUCCESS => (),
-            v => return Err(v),
-        }
+        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+            Ok(buf) => buf,
+            Err(v) => return Err(v),
+        };
         let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;

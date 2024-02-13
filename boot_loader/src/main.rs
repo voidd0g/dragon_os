@@ -2,40 +2,34 @@
 #![no_main]
 
 mod to_string;
-mod uefi;
 
-use core::{arch::asm, mem::size_of, panic::PanicInfo, ptr::null_mut, slice};
+use core::{
+    arch::asm,
+    mem::{size_of, transmute},
+    panic::PanicInfo,
+    slice,
+};
 use to_string::ToString;
-use uefi::{
+use common::uefi::{
     constant::{
-        efi_file_mode::{EFI_FILE_MODE_CREATE, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE},
-        efi_locate_search_type::ByProtocol,
-        efi_memory_type::EfiLoaderData,
-        efi_open_protocol::EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-        efi_status::{EFI_ABORTED, EFI_BUFFER_TOO_SMALL, EFI_SUCCESS},
-        guid::{
-            EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, EFI_LOADED_IMAGE_PROTOCOL_GUID,
-            EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
-        },
+        efi_allocate_type::AllocateAddress, efi_file_mode::{EFI_FILE_MODE_CREATE, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE}, efi_locate_search_type::ByProtocol, efi_memory_type::EfiLoaderData, efi_open_protocol::EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL, efi_status::{EFI_ABORTED, EFI_BUFFER_TOO_SMALL, EFI_SUCCESS}, guid::{
+            EFI_FILE_INFO_GUID, EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, EFI_LOADED_IMAGE_PROTOCOL_GUID, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID
+        }
     },
     data_types::{
-        basic_types::{CHAR16, EFI_HANDLE, EFI_STATUS, UINT32, UINT8, UINTN},
-        structs::efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR,
+        basic_types::{CHAR16, EFI_HANDLE, EFI_STATUS, UINT32, UINT64, UINT8, UINTN, VOID},
+        structs::{efi_file_info::EFI_FILE_INFO, efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR},
     },
     protocols::{
         efi_file_protocol::EFI_FILE_PROTOCOL,
         efi_graphics_output_protocol::EFI_GRAPHICS_OUTPUT_PROTOCOL,
         efi_loaded_image_protocol::EFI_LOADED_IMAGE_PROTOCOL,
         efi_simple_file_system_protocol::EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,
+        efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
     },
     tables::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EFI_SYSTEM_TABLE},
 };
 use utf16_literal::utf16;
-
-use crate::uefi::{
-    constant::{efi_allocate_type::AllocateAddress, guid::EFI_FILE_INFO_GUID},
-    data_types::{basic_types::UINT64, structs::efi_file_info::EFI_FILE_INFO},
-};
 
 #[no_mangle]
 pub extern "efiapi" fn efi_main(
@@ -46,194 +40,67 @@ pub extern "efiapi" fn efi_main(
     let boot_services = system_table.boot_services();
     match cout.reset(false) {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => end(),
     }
-    match cout.output_string(utf16!("Hello World\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Hello World\r\n\0"));
 
-    match cout.output_string(utf16!("Get memory map\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Get memory map\r\n\0"));
     let memmap = match get_memory_map(boot_services) {
         Ok(memmap) => memmap,
-        Err(v) => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        Err(v) => stop_with_error(v, boot_services, cout),
     };
 
-    match cout.output_string(utf16!("Open root dir\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Open root dir\r\n\0"));
     let root_dir = match open_root_dir(image_handle, boot_services) {
         Ok(root_dir) => root_dir,
-        Err(v) => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        Err(v) => stop_with_error(v, boot_services, cout),
     };
 
-    match cout.output_string(utf16!("Open memmap file\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
-    let (status, memmap_file) = root_dir.open(
+    cout.output_string(utf16!("Open memmap file\r\n\0"));
+    let memmap_file = match root_dir.open(
         utf16!("memmap.txt\0"),
         EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
         0,
-    );
-    match status {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    ) {
+        Ok(memmap_file) => memmap_file,
+        Err(v) => stop_with_error(v, boot_services, cout),
+    };
 
-    match cout.output_string(utf16!("Save memmap to file\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Save memmap to file\r\n\0"));
     let status = save_memory_map(&memmap, boot_services, memmap_file);
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
 
-    match cout.output_string(utf16!("Close memmap file\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Close memmap file\r\n\0"));
     let status = memmap_file.close();
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
 
-    match cout.output_string(utf16!("Free memmap buffer\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Free memmap buffer\r\n\0"));
     let status = boot_services.free_pool(memmap.memory_map_buffer);
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
 
-    match cout.output_string(utf16!("Get gop\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Get gop\r\n\0"));
     let gop = match open_gop(image_handle, boot_services) {
         Ok(gop) => gop,
-        Err(v) => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        Err(v) => stop_with_error(v, boot_services, cout),
     };
 
-    match cout.output_string(utf16!("Open kernel file\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Open kernel file\r\n\0"));
     const KERNEL_FILE_NAME: &[CHAR16] = utf16!(".\\KERNEL.ELF\0");
-    let (status, kernel_file) = root_dir.open(KERNEL_FILE_NAME, EFI_FILE_MODE_READ, 0);
-    match status {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    let kernel_file = match root_dir.open(KERNEL_FILE_NAME, EFI_FILE_MODE_READ, 0) {
+        Ok(kernel_file) => kernel_file,
+        Err(v) => stop_with_error(v, boot_services, cout),
+    };
 
-    match cout.output_string(utf16!("Get kernel file info\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Get kernel file info\r\n\0"));
     const FILE_INFO_BUFFER_SIZE: UINTN =
         size_of::<EFI_FILE_INFO>() + size_of::<CHAR16>() * KERNEL_FILE_NAME.len();
     let mut kernel_file_info_buffer_size = FILE_INFO_BUFFER_SIZE;
@@ -245,26 +112,13 @@ pub extern "efiapi" fn efi_main(
     );
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
     let kernel_file_info =
         unsafe { (kernel_file_info_buffer.as_ptr() as *const EFI_FILE_INFO).as_ref() }.unwrap();
     let kernel_file_size = kernel_file_info.file_size();
 
-    match cout.output_string(utf16!("Allocate page for loading kernel\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Allocate page for loading kernel\r\n\0"));
     let mut kernel_base_addr = 0x72A000;
     const PAGE_SIZE: UINT64 = 0x1000;
     let status = boot_services.allocate_pages(
@@ -275,72 +129,49 @@ pub extern "efiapi" fn efi_main(
     );
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
 
-    match cout.output_string(utf16!("Load from kernel file\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Load from kernel file\r\n\0"));
     let mut kernel_file_size_in_out = kernel_file_size as UINTN;
     let status = kernel_file.read(&mut kernel_file_size_in_out, unsafe {
         slice::from_raw_parts_mut(kernel_base_addr as *mut UINT8, kernel_file_size as usize)
     });
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
 
-    match cout.output_string(utf16!("Get memory map\r\n\0")) {
-        EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
-    }
+    cout.output_string(utf16!("Get memory map\r\n\0"));
     let memmap = match get_memory_map(boot_services) {
         Ok(memmap) => memmap,
-        Err(v) => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        Err(v) => stop_with_error(v, boot_services, cout),
     };
 
     let status = boot_services.exit_boot_services(image_handle, memmap.map_key);
     match status {
         EFI_SUCCESS => (),
-        v => {
-            let str = (v, 16u8).to_string(boot_services).unwrap();
-            cout.output_string(str);
-            free_string(str, boot_services);
-            end()
-        }
+        v => stop_with_error(v, boot_services, cout),
     }
 
-    // (unsafe { ((kernel_base_addr + 24) as *const extern "sysv64" fn(UINT64, UINTN) -> !).read() })(
-    //     gop.mode().frame_buffer_base(),
-    //     gop.mode().frame_buffer_size(),
-    // );
+    (unsafe {
+        transmute::<*const VOID, extern "sysv64" fn(UINT64, UINTN) -> !>(
+            (*((kernel_base_addr + 24) as *const u64)) as *const VOID,
+        )
+    })(
+        gop.mode().frame_buffer_base(),
+        gop.mode().frame_buffer_size(),
+    )
+}
 
+fn stop_with_error(
+    v: EFI_STATUS,
+    boot_services: &EFI_BOOT_SERVICES,
+    cout: &EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
+) -> ! {
+    let str = (v, 16u8).to_string(boot_services).unwrap();
+    cout.output_string(str);
+    free_string(str, boot_services);
     end()
 }
 
@@ -357,11 +188,10 @@ fn concat_string<'a>(
     boot_services: &'a EFI_BOOT_SERVICES,
 ) -> Result<&'a [CHAR16], EFI_STATUS> {
     let len = strs.iter().map(|str| str.len()).sum::<usize>() - strs.len() + 1;
-    let (status, buf) = boot_services.allocate_pool(EfiLoaderData, len * 2);
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+        Ok(buf) => buf,
+        Err(v) => return Err(v),
+    };
     let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
     let mut iter = buf.iter_mut();
     for str in strs {
@@ -380,7 +210,6 @@ fn free_string(str: &[CHAR16], boot_services: &EFI_BOOT_SERVICES) -> EFI_STATUS 
     status
 }
 
-#[deny(non_snake_case)]
 struct MemoryMap<'buffer> {
     memory_map_buffer: &'buffer [UINT8],
     map_size: UINTN,
@@ -391,34 +220,36 @@ struct MemoryMap<'buffer> {
 
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
-    loop {}
+    loop {
+        unsafe {
+            asm!("hlt");
+        }
+    }
 }
 
 fn open_gop(
     image_handle: EFI_HANDLE,
     boot_services: &EFI_BOOT_SERVICES,
 ) -> Result<&EFI_GRAPHICS_OUTPUT_PROTOCOL, EFI_STATUS> {
-    let (status, num_gop_handles, gop_handles) = boot_services.locate_handle_buffer(
+    let (num_gop_handles, gop_handles) = match boot_services.locate_handle_buffer(
         ByProtocol,
         Some(&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID),
         None,
-    );
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
-    let (status, gop) = boot_services.open_protocol(
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
+    };
+    let gop = match boot_services.open_protocol(
         *gop_handles.iter().nth(0).unwrap(),
         &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
         Some(()),
         image_handle,
         image_handle,
         EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-    );
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    ) {
+        Ok(gop) => gop,
+        Err(v) => return Err(v),
+    };
     let gop = match gop {
         Some(gop) => gop,
         None => return Err(EFI_ABORTED),
@@ -441,28 +272,27 @@ fn open_gop(
 fn get_memory_map<'a>(boot_services: &'a EFI_BOOT_SERVICES) -> Result<MemoryMap<'a>, EFI_STATUS> {
     let mut empty_buf = [];
     let mut memmap_size_needed = 0;
-    let (status, _, _, _) = boot_services.get_memory_map(&mut memmap_size_needed, &mut empty_buf);
-    match status {
-        EFI_SUCCESS => (),
-        EFI_BUFFER_TOO_SMALL => (),
-        v => return Err(v),
-    }
+    let _ = match boot_services.get_memory_map(&mut memmap_size_needed, &mut empty_buf) {
+        Ok(_) => (),
+        Err(v) => match v {
+            EFI_BUFFER_TOO_SMALL => (),
+            v => return Err(v),
+        },
+    };
     memmap_size_needed += 256;
     memmap_size_needed /= 8;
     memmap_size_needed *= 8;
 
-    let (status, memmap_buf) = boot_services.allocate_pool(EfiLoaderData, memmap_size_needed);
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    let memmap_buf = match boot_services.allocate_pool(EfiLoaderData, memmap_size_needed) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
+    };
     let mut memmap_size = memmap_size_needed;
-    let (status, map_key, descriptor_size, descriptor_version) =
-        boot_services.get_memory_map(&mut memmap_size, memmap_buf);
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    let (map_key, descriptor_size, descriptor_version) =
+        match boot_services.get_memory_map(&mut memmap_size, memmap_buf) {
+            Ok(res) => res,
+            Err(v) => return Err(v),
+        };
     Ok(MemoryMap {
         memory_map_buffer: memmap_buf,
         map_size: memmap_size,
@@ -476,45 +306,42 @@ fn open_root_dir(
     image_handle: EFI_HANDLE,
     boot_services: &EFI_BOOT_SERVICES,
 ) -> Result<&EFI_FILE_PROTOCOL, EFI_STATUS> {
-    let (status, loaded_image) = boot_services.open_protocol::<EFI_LOADED_IMAGE_PROTOCOL>(
+    let loaded_image = match boot_services.open_protocol::<EFI_LOADED_IMAGE_PROTOCOL>(
         image_handle,
         &EFI_LOADED_IMAGE_PROTOCOL_GUID,
         Some(()),
         image_handle,
         image_handle,
         EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-    );
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    ) {
+        Ok(loaded_image) => loaded_image,
+        Err(v) => return Err(v),
+    };
     let loaded_image = match loaded_image {
         Some(loaded_image) => loaded_image,
         None => return Err(EFI_ABORTED),
     };
 
-    let (status, fs) = boot_services.open_protocol::<EFI_SIMPLE_FILE_SYSTEM_PROTOCOL>(
+    let fs = match boot_services.open_protocol::<EFI_SIMPLE_FILE_SYSTEM_PROTOCOL>(
         loaded_image.device_handle(),
         &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
         Some(()),
         image_handle,
         image_handle,
         EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-    );
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    ) {
+        Ok(fs) => fs,
+        Err(v) => return Err(v),
+    };
     let fs = match fs {
         Some(fs) => fs,
         None => return Err(EFI_ABORTED),
     };
 
-    let (status, root) = fs.open_volume();
-    match status {
-        EFI_SUCCESS => (),
-        v => return Err(v),
-    }
+    let root = match fs.open_volume() {
+        Ok(root) => root,
+        Err(v) => return Err(v),
+    };
 
     Ok(root)
 }
@@ -551,21 +378,39 @@ fn save_memory_map(
         };
         let type_string = match (descriptor.r#type(), 16u8).to_string(boot_services) {
             Ok(type_string) => type_string,
-            Err(v) => return v,
+            Err(v) => {
+                free_string(i_string, boot_services);
+                return v;
+            }
         };
         let physical_start_string =
             match (descriptor.physical_start(), 16u8).to_string(boot_services) {
                 Ok(physical_start_string) => physical_start_string,
-                Err(v) => return v,
+                Err(v) => {
+                    free_string(type_string, boot_services);
+                    free_string(i_string, boot_services);
+                    return v;
+                }
             };
         let number_of_pages_string =
             match (descriptor.number_of_pages(), 16u8).to_string(boot_services) {
                 Ok(number_of_pages_string) => number_of_pages_string,
-                Err(v) => return v,
+                Err(v) => {
+                    free_string(physical_start_string, boot_services);
+                    free_string(type_string, boot_services);
+                    free_string(i_string, boot_services);
+                    return v;
+                }
             };
         let attribute_string = match (descriptor.attribute(), 16u8).to_string(boot_services) {
             Ok(attribute_string) => attribute_string,
-            Err(v) => return v,
+            Err(v) => {
+                free_string(number_of_pages_string, boot_services);
+                free_string(physical_start_string, boot_services);
+                free_string(type_string, boot_services);
+                free_string(i_string, boot_services);
+                return v;
+            }
         };
         let str = match concat_string(
             &[
@@ -583,7 +428,14 @@ fn save_memory_map(
             boot_services,
         ) {
             Ok(attribute_string) => attribute_string,
-            Err(v) => return v,
+            Err(v) => {
+                free_string(attribute_string, boot_services);
+                free_string(number_of_pages_string, boot_services);
+                free_string(physical_start_string, boot_services);
+                free_string(type_string, boot_services);
+                free_string(i_string, boot_services);
+                return v;
+            }
         };
         free_string(attribute_string, boot_services);
         free_string(number_of_pages_string, boot_services);
@@ -598,11 +450,11 @@ fn save_memory_map(
         };
         let mut content_buffer_size = content_buffer.len();
         let status = file.write(&mut content_buffer_size, content_buffer);
+        free_string(str, boot_services);
         match status {
             EFI_SUCCESS => (),
             v => return v,
         }
-        free_string(str, boot_services);
         descriptor_start += memmap.descriptor_size;
         i += 1;
     }

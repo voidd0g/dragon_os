@@ -5,11 +5,13 @@
 	"target-c-int-width": "32",
 	"os": "none",
 	"arch": "x86_64",
-	"data-layout": "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
+	"data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
+	"features": "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-3dnow,-3dnowa,-avx,-avx2,+soft-float",
 	"linker": "rust-lld",
 	"linker-flavor": "ld.lld",
 	"pre-link-args": {
 		"ld.lld": [
+			"-nmagic",
 			"--entry=kernel_main",
 			"--image-base=0x72A000",
 			"--static",

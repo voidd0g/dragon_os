@@ -1,6 +1,9 @@
 use core::ptr::null;
 
-use crate::uefi::data_types::basic_types::{EFI_STATUS, UINT64};
+use crate::uefi::{
+    constant::efi_status::EFI_SUCCESS,
+    data_types::basic_types::{EFI_STATUS, UINT64},
+};
 
 use super::efi_file_protocol::EFI_FILE_PROTOCOL;
 
@@ -17,9 +20,12 @@ pub struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 
 #[deny(non_snake_case)]
 impl EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
-    pub fn open_volume(&self) -> (EFI_STATUS, &EFI_FILE_PROTOCOL) {
+    pub fn open_volume(&self) -> Result<&EFI_FILE_PROTOCOL, EFI_STATUS> {
         let mut root_out = null();
         let status = unsafe { (self.OpenVolume)(self, &mut root_out) };
-        (status, unsafe { root_out.as_ref() }.unwrap())
+        match status {
+            EFI_SUCCESS => Ok(unsafe { root_out.as_ref() }.unwrap()),
+            v => Err(v),
+        }
     }
 }

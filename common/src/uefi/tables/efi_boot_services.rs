@@ -4,6 +4,7 @@ use core::{
 };
 
 use crate::uefi::{
+    constant::efi_status::EFI_SUCCESS,
     data_types::{
         basic_types::{
             BOOLEAN, CHAR16, C_VARIABLE_ARGUMENT, EFI_ALLOCATE_TYPE, EFI_EVENT, EFI_GUID,
@@ -300,7 +301,7 @@ impl EFI_BOOT_SERVICES {
         &self,
         memory_map_size_in_out: &mut UINTN,
         memory_map_out: &mut [UINT8],
-    ) -> (EFI_STATUS, UINTN, UINTN, UINT32) {
+    ) -> Result<(UINTN, UINTN, UINT32), EFI_STATUS> {
         let mut map_key_out = 0;
         let mut descriptor_size_out = 0;
         let mut descriptor_version_out = 0;
@@ -313,23 +314,22 @@ impl EFI_BOOT_SERVICES {
                 &mut descriptor_version_out,
             )
         };
-        (
-            status,
-            map_key_out,
-            descriptor_size_out,
-            descriptor_version_out,
-        )
+        match status {
+            EFI_SUCCESS => Ok((map_key_out, descriptor_size_out, descriptor_version_out)),
+            v => Err(v),
+        }
     }
     pub fn allocate_pool(
         &self,
         pool_type: EFI_MEMORY_TYPE,
         size: UINTN,
-    ) -> (EFI_STATUS, &mut [UINT8]) {
+    ) -> Result<&mut [UINT8], EFI_STATUS> {
         let mut buffer = null();
         let status = unsafe { (self.AllocatePool)(pool_type, size, &mut buffer) };
-        (status, unsafe {
-            slice::from_raw_parts_mut(buffer as *mut UINT8, size)
-        })
+        match status {
+            EFI_SUCCESS => Ok(unsafe { slice::from_raw_parts_mut(buffer as *mut UINT8, size) }),
+            v => Err(v),
+        }
     }
     pub fn free_pool(&self, buffer: &[UINT8]) -> EFI_STATUS {
         let status = unsafe { (self.FreePool)(buffer.as_ptr() as *const VOID) };
@@ -341,7 +341,7 @@ impl EFI_BOOT_SERVICES {
         search_type: EFI_LOCATE_SEARCH_TYPE,
         protocol_optional: Option<&EFI_GUID>,
         search_key_optional: Option<&VOID>,
-    ) -> (EFI_STATUS, UINTN, &[EFI_HANDLE]) {
+    ) -> Result<(UINTN, &[EFI_HANDLE]), EFI_STATUS> {
         let mut no_handles = 0;
         let mut buffer = null();
         let status = unsafe {
@@ -359,9 +359,12 @@ impl EFI_BOOT_SERVICES {
                 &mut buffer,
             )
         };
-        (status, no_handles, unsafe {
-            slice::from_raw_parts(buffer, no_handles)
-        })
+        match status {
+            EFI_SUCCESS => Ok((no_handles, unsafe {
+                slice::from_raw_parts(buffer, no_handles)
+            })),
+            v => Err(v),
+        }
     }
 
     pub fn exit_boot_services(&self, image_handle: EFI_HANDLE, map_key: UINTN) -> EFI_STATUS {
@@ -377,7 +380,7 @@ impl EFI_BOOT_SERVICES {
         agent_handle: EFI_HANDLE,
         controller_handle: EFI_HANDLE,
         attributes: UINT32,
-    ) -> (EFI_STATUS, Option<&T>) {
+    ) -> Result<Option<&T>, EFI_STATUS> {
         match interface_optional {
             Some(()) => {
                 let mut interface_out = null();
@@ -391,10 +394,12 @@ impl EFI_BOOT_SERVICES {
                         attributes,
                     )
                 };
-                (
-                    status,
-                    Some(unsafe { (interface_out as *const T).as_ref() }.unwrap()),
-                )
+                match status {
+                    EFI_SUCCESS => Ok(Some(
+                        unsafe { (interface_out as *const T).as_ref() }.unwrap(),
+                    )),
+                    v => Err(v),
+                }
             }
             None => {
                 let status = unsafe {
@@ -407,7 +412,10 @@ impl EFI_BOOT_SERVICES {
                         attributes,
                     )
                 };
-                (status, None)
+                match status {
+                    EFI_SUCCESS => Ok(None),
+                    v => Err(v),
+                }
             }
         }
     }
