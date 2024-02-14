@@ -14,6 +14,12 @@ pub struct EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE {
 
 #[deny(non_snake_case)]
 impl EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE {
+    pub fn info(&self) -> &EFI_GRAPHICS_OUTPUT_MODE_INFORMATION {
+        unsafe {
+            self.Info.as_ref()
+        }.unwrap()
+    }
+
     pub fn frame_buffer_base(&self) -> EFI_PHYSICAL_ADDRESS {
         self.FrameBufferBase
     }

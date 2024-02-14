@@ -11,3 +11,20 @@ pub struct EFI_GRAPHICS_OUTPUT_MODE_INFORMATION {
     PixelInformation: EFI_PIXEL_BITMASK,
     PixelsPerScanLine: UINT32,
 }
+
+#[deny(non_snake_case)]
+impl EFI_GRAPHICS_OUTPUT_MODE_INFORMATION {
+    pub fn horizontal_resolution(&self) -> UINT32 {
+        self.HorizontalResolution
+    }
+    pub fn vertical_resolution(&self) -> UINT32 {
+        self.VerticalResolution
+    }
+    pub fn pixel_format(&self) -> EFI_GRAPHICS_PIXEL_FORMAT {
+        self.PixelFormat
+    }
+    
+    pub fn pixels_per_scan_line(&self) -> UINT32 {
+        self.PixelsPerScanLine
+    }
+}

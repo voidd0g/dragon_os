@@ -3,6 +3,35 @@
 
 mod to_string;
 
+use common::{
+    argument::{Argument, FrameBufferConfig},
+    uefi::{
+        constant::{
+            efi_allocate_type::AllocateAddress,
+            efi_file_mode::{EFI_FILE_MODE_CREATE, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE},
+            efi_locate_search_type::ByProtocol,
+            efi_memory_type::EfiLoaderData,
+            efi_open_protocol::EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+            efi_status::{EFI_ABORTED, EFI_BUFFER_TOO_SMALL, EFI_SUCCESS},
+            guid::{
+                EFI_FILE_INFO_GUID, EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
+                EFI_LOADED_IMAGE_PROTOCOL_GUID, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+            },
+        },
+        data_types::{
+            basic_types::{CHAR16, EFI_HANDLE, EFI_STATUS, UINT32, UINT64, UINT8, UINTN, VOID},
+            structs::{efi_file_info::EFI_FILE_INFO, efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR},
+        },
+        protocols::{
+            efi_file_protocol::EFI_FILE_PROTOCOL,
+            efi_graphics_output_protocol::EFI_GRAPHICS_OUTPUT_PROTOCOL,
+            efi_loaded_image_protocol::EFI_LOADED_IMAGE_PROTOCOL,
+            efi_simple_file_system_protocol::EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,
+            efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
+        },
+        tables::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EFI_SYSTEM_TABLE},
+    },
+};
 use core::{
     arch::asm,
     mem::{size_of, transmute},
@@ -10,32 +39,14 @@ use core::{
     slice,
 };
 use to_string::ToString;
-use common::uefi::{
-    constant::{
-        efi_allocate_type::AllocateAddress, efi_file_mode::{EFI_FILE_MODE_CREATE, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE}, efi_locate_search_type::ByProtocol, efi_memory_type::EfiLoaderData, efi_open_protocol::EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL, efi_status::{EFI_ABORTED, EFI_BUFFER_TOO_SMALL, EFI_SUCCESS}, guid::{
-            EFI_FILE_INFO_GUID, EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, EFI_LOADED_IMAGE_PROTOCOL_GUID, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID
-        }
-    },
-    data_types::{
-        basic_types::{CHAR16, EFI_HANDLE, EFI_STATUS, UINT32, UINT64, UINT8, UINTN, VOID},
-        structs::{efi_file_info::EFI_FILE_INFO, efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR},
-    },
-    protocols::{
-        efi_file_protocol::EFI_FILE_PROTOCOL,
-        efi_graphics_output_protocol::EFI_GRAPHICS_OUTPUT_PROTOCOL,
-        efi_loaded_image_protocol::EFI_LOADED_IMAGE_PROTOCOL,
-        efi_simple_file_system_protocol::EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,
-        efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
-    },
-    tables::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EFI_SYSTEM_TABLE},
-};
 use utf16_literal::utf16;
 
 #[no_mangle]
 pub extern "efiapi" fn efi_main(
     image_handle: EFI_HANDLE,
-    system_table: &EFI_SYSTEM_TABLE,
+    system_table: *const EFI_SYSTEM_TABLE,
 ) -> EFI_STATUS {
+    let system_table = unsafe { system_table.as_ref() }.unwrap();
     let cout = system_table.con_out();
     let boot_services = system_table.boot_services();
     match cout.reset(false) {
@@ -154,14 +165,23 @@ pub extern "efiapi" fn efi_main(
         v => stop_with_error(v, boot_services, cout),
     }
 
+    let graphic_mode = gop.mode();
+    let graphic_info = graphic_mode.info();
+    let frame_buffer_config = FrameBufferConfig::new(
+        graphic_mode.frame_buffer_base() as *mut u8,
+        graphic_mode.frame_buffer_size(),
+        graphic_info.pixels_per_scan_line(),
+        graphic_info.horizontal_resolution(),
+        graphic_info.vertical_resolution(),
+        graphic_info.pixel_format(),
+    );
+    let arg = Argument::new(&frame_buffer_config);
+
     (unsafe {
-        transmute::<*const VOID, extern "sysv64" fn(UINT64, UINTN) -> !>(
+        transmute::<*const VOID, extern "sysv64" fn(*const Argument) -> !>(
             (*((kernel_base_addr + 24) as *const u64)) as *const VOID,
         )
-    })(
-        gop.mode().frame_buffer_base(),
-        gop.mode().frame_buffer_size(),
-    )
+    })(&arg)
 }
 
 fn stop_with_error(
