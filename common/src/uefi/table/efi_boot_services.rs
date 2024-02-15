@@ -295,9 +295,12 @@ impl EfiBootServices {
         memory_type: EfiMemoryType,
         pages: UnsignedIntNative,
         memory_in_out: &mut EfiPhysicalAddress,
-    ) -> EfiStatus {
+    ) -> Result<(), EfiStatus> {
         let status = unsafe { (self.allocate_pages)(r#type, memory_type, pages, memory_in_out) };
-        status
+        match status {
+            EFI_SUCCESS => Ok(()),
+            v => Err(v),
+        }
     }
 
     pub fn get_memory_map(
@@ -336,9 +339,12 @@ impl EfiBootServices {
             v => Err(v),
         }
     }
-    pub fn free_pool(&self, buffer: &[UnsignedInt8]) -> EfiStatus {
+    pub fn free_pool(&self, buffer: &[UnsignedInt8]) -> Result<(), EfiStatus> {
         let status = unsafe { (self.free_pool)(buffer.as_ptr() as *const Void) };
-        status
+        match status {
+            EFI_SUCCESS => Ok(()),
+            v => Err(v),
+        }
     }
 
     pub fn locate_handle_buffer(
@@ -376,9 +382,12 @@ impl EfiBootServices {
         &self,
         image_handle: EfiHandle,
         map_key: UnsignedIntNative,
-    ) -> EfiStatus {
+    ) -> Result<(), EfiStatus> {
         let status = unsafe { (self.exit_boot_services)(image_handle, map_key) };
-        status
+        match status {
+            EFI_SUCCESS => Ok(()),
+            v => Err(v),
+        }
     }
 
     pub fn open_protocol<T>(

@@ -1,6 +1,9 @@
-use crate::uefi::data_type::{
-    basic_type::{Boolean, Char16, EfiStatus, UnsignedIntNative},
-    simple_text_output_mode::SimpleTextOutputMode,
+use crate::uefi::{
+    constant::efi_status::EFI_SUCCESS,
+    data_type::{
+        basic_type::{Boolean, Char16, EfiStatus, UnsignedIntNative},
+        simple_text_output_mode::SimpleTextOutputMode,
+    },
 };
 
 type EfiTextReset = unsafe extern "efiapi" fn(
@@ -56,11 +59,19 @@ pub struct EfiSimpleTextOutputProtocol {
 }
 
 impl EfiSimpleTextOutputProtocol {
-    pub fn reset(&self, extended_verification: bool) -> EfiStatus {
-        unsafe { (self.reset)(self, if extended_verification { 1u8 } else { 0u8 }) }
+    pub fn reset(&self, extended_verification: bool) -> Result<(), EfiStatus> {
+        let status = unsafe { (self.reset)(self, if extended_verification { 1u8 } else { 0u8 }) };
+        match status {
+            EFI_SUCCESS => Ok(()),
+            v => Err(v),
+        }
     }
 
-    pub fn output_string(&self, string: &[Char16]) -> EfiStatus {
-        unsafe { (self.output_string)(self, string.as_ptr()) }
+    pub fn output_string(&self, string: &[Char16]) -> Result<(), EfiStatus> {
+        let status = unsafe { (self.output_string)(self, string.as_ptr()) };
+        match status {
+            EFI_SUCCESS => Ok(()),
+            v => Err(v),
+        }
     }
 }
