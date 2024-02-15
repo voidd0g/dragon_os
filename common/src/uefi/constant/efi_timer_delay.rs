@@ -1,5 +1,5 @@
-use crate::uefi::data_types::basic_types::EFI_TIMER_DELAY;
+use crate::uefi::data_type::basic_type::EFI_TIMER_DELAY;
 
-pub const TimerCancel: EFI_TIMER_DELAY = 0;
-pub const TimerPeriodic: EFI_TIMER_DELAY = 1;
-pub const TimerRelative: EFI_TIMER_DELAY = 2;
+pub const TIMER_CANCEL: EFI_TIMER_DELAY = 0;
+pub const TIMER_PERIODIC: EFI_TIMER_DELAY = 1;
+pub const TIMER_RELATIVE: EFI_TIMER_DELAY = 2;

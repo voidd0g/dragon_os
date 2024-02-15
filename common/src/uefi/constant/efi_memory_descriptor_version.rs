@@ -1,3 +1,3 @@
-use crate::uefi::data_types::basic_types::UINT64;
+use crate::uefi::data_type::basic_type::UnsignedInt64;
 
-pub const EFI_MEMORY_DESCRIPTOR_VERSION: UINT64 = 1;
+pub const EFI_MEMORY_DESCRIPTOR_VERSION: UnsignedInt64 = 1;

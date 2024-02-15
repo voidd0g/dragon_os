@@ -5,6 +5,10 @@ mod to_string;
 
 use common::{
     argument::{Argument, FrameBufferConfig},
+    elf::{
+        constant::elf64_program_type::ELF64_PROGRAM_TYPE_LOAD, elf64_header::Elf64Header,
+        elf64_program_header::Elf64ProgramHeader,
+    },
     uefi::{
         constant::{
             efi_allocate_type::AllocateAddress,
@@ -18,25 +22,26 @@ use common::{
                 EFI_LOADED_IMAGE_PROTOCOL_GUID, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
             },
         },
-        data_types::{
-            basic_types::{CHAR16, EFI_HANDLE, EFI_STATUS, UINT32, UINT64, UINT8, UINTN, VOID},
-            structs::{efi_file_info::EFI_FILE_INFO, efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR},
+        data_type::{
+            basic_type::{
+                CHAR16, EFI_HANDLE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, UINT32, UINT64, UINT8, UINTN,
+                VOID,
+            },
+            efi_file_info::EFI_FILE_INFO,
+            efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR,
         },
-        protocols::{
+        protocol::{
             efi_file_protocol::EFI_FILE_PROTOCOL,
             efi_graphics_output_protocol::EFI_GRAPHICS_OUTPUT_PROTOCOL,
             efi_loaded_image_protocol::EFI_LOADED_IMAGE_PROTOCOL,
             efi_simple_file_system_protocol::EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,
             efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
         },
-        tables::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EFI_SYSTEM_TABLE},
+        table::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EFI_SYSTEM_TABLE},
     },
 };
 use core::{
-    arch::asm,
-    mem::{size_of, transmute},
-    panic::PanicInfo,
-    slice,
+    arch::asm, mem::{size_of, transmute}, panic::PanicInfo, ptr::{copy, write_bytes}, slice
 };
 use to_string::ToString;
 use utf16_literal::utf16;
@@ -129,13 +134,31 @@ pub extern "efiapi" fn efi_main(
         unsafe { (kernel_file_info_buffer.as_ptr() as *const EFI_FILE_INFO).as_ref() }.unwrap();
     let kernel_file_size = kernel_file_info.file_size();
 
-    cout.output_string(utf16!("Allocate page for loading kernel\r\n\0"));
-    let mut kernel_base_addr = 0x72A000;
+    cout.output_string(utf16!("Allocate pool for kernel file content\r\n\0"));
+    let kernel_buf = match boot_services.allocate_pool(EfiLoaderData, kernel_file_size as UINTN) {
+        Ok(res) => res,
+        Err(v) => stop_with_error(v, boot_services, cout),
+    };
+
+    cout.output_string(utf16!("Read kernel file content\r\n\0"));
+    let mut kernel_file_size_in_out = kernel_file_size as UINTN;
+    let status = kernel_file.read(&mut kernel_file_size_in_out, kernel_buf);
+    match status {
+        EFI_SUCCESS => (),
+        v => stop_with_error(v, boot_services, cout),
+    }
+    let kernel_elf_header =
+        unsafe { (kernel_buf.as_ptr() as *const Elf64Header).as_ref() }.unwrap();
+    let (kernel_beg, kernel_end) = calc_load_address_range(kernel_elf_header);
+
+    cout.output_string(utf16!("Allocate pages for loading kernel\r\n\0"));
+    let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as UINTN;
+    let mut kernel_base_addr = kernel_beg;
     const PAGE_SIZE: UINT64 = 0x1000;
     let status = boot_services.allocate_pages(
         AllocateAddress,
         EfiLoaderData,
-        ((kernel_file_size + PAGE_SIZE - 1) / PAGE_SIZE) as UINTN,
+        page_num,
         &mut kernel_base_addr,
     );
     match status {
@@ -143,11 +166,11 @@ pub extern "efiapi" fn efi_main(
         v => stop_with_error(v, boot_services, cout),
     }
 
-    cout.output_string(utf16!("Load from kernel file\r\n\0"));
-    let mut kernel_file_size_in_out = kernel_file_size as UINTN;
-    let status = kernel_file.read(&mut kernel_file_size_in_out, unsafe {
-        slice::from_raw_parts_mut(kernel_base_addr as *mut UINT8, kernel_file_size as usize)
-    });
+    cout.output_string(utf16!("Copy content to pages allocated\r\n\0"));
+    copy_load_segments(kernel_elf_header);
+
+    cout.output_string(utf16!("Free pool for kernel file content\r\n\0"));
+    let status = boot_services.free_pool(&kernel_buf);
     match status {
         EFI_SUCCESS => (),
         v => stop_with_error(v, boot_services, cout),
@@ -201,6 +224,57 @@ fn end() -> ! {
             asm!("hlt");
         }
     }
+}
+
+fn copy_load_segments(elf_header: &Elf64Header) -> () {
+    let mut cur_address = (elf_header as *const Elf64Header) as EFI_PHYSICAL_ADDRESS
+        + elf_header.program_header_offset();
+
+    for _ in 0..elf_header.program_header_num() {
+        let program_header =
+            unsafe { (cur_address as *const Elf64ProgramHeader).as_ref() }.unwrap();
+
+        if program_header.r#type() == ELF64_PROGRAM_TYPE_LOAD {
+            let file_size = program_header.file_size();
+            let remaining_size = program_header.memory_size() - file_size;
+            let file_offset = program_header.offset();
+            let virtual_address = program_header.virtual_address();
+            
+            unsafe {
+                copy(((elf_header as *const Elf64Header) as EFI_PHYSICAL_ADDRESS + file_offset) as *const UINT8, virtual_address as *mut UINT8, file_size as UINTN);
+                write_bytes((virtual_address as EFI_PHYSICAL_ADDRESS + file_size) as *mut UINT8, 0, remaining_size as UINTN)
+            }
+        }
+
+        cur_address += elf_header.program_header_element_size() as EFI_PHYSICAL_ADDRESS;
+    }
+}
+
+fn calc_load_address_range(
+    elf_header: &Elf64Header,
+) -> (EFI_PHYSICAL_ADDRESS, EFI_PHYSICAL_ADDRESS) {
+    let mut beg = EFI_PHYSICAL_ADDRESS::MAX;
+    let mut end = 0;
+    let mut cur_address = (elf_header as *const Elf64Header) as EFI_PHYSICAL_ADDRESS
+        + elf_header.program_header_offset();
+
+    for _ in 0..elf_header.program_header_num() {
+        let program_header =
+            unsafe { (cur_address as *const Elf64ProgramHeader).as_ref() }.unwrap();
+
+        if program_header.r#type() == ELF64_PROGRAM_TYPE_LOAD {
+            let virtual_address = program_header.virtual_address() as EFI_PHYSICAL_ADDRESS;
+            let cur_beg = virtual_address;
+            let cur_end = virtual_address + program_header.memory_size();
+
+            beg = if cur_beg < beg { cur_beg } else { beg };
+            end = if end < cur_end { cur_end } else { end };
+        }
+
+        cur_address += elf_header.program_header_element_size() as EFI_PHYSICAL_ADDRESS;
+    }
+
+    (beg, end)
 }
 
 fn concat_string<'a>(

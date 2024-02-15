@@ -11,7 +11,6 @@
 	"linker-flavor": "ld.lld",
 	"pre-link-args": {
 		"ld.lld": [
-			"-nmagic",
 			"--entry=kernel_main",
 			"--image-base=0x72A000",
 			"--static",

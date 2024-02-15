@@ -1,9 +1,9 @@
 use core::slice;
 
 use common::uefi::{
-    constant::{efi_memory_type::EfiLoaderData, efi_status::EFI_SUCCESS},
-    data_types::basic_types::{CHAR16, EFI_STATUS},
-    tables::efi_boot_services::EFI_BOOT_SERVICES,
+    constant::efi_memory_type::EfiLoaderData,
+    data_type::basic_type::{CHAR16, EFI_STATUS},
+    table::efi_boot_services::EFI_BOOT_SERVICES,
 };
 
 pub trait ToString {

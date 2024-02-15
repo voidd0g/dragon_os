@@ -1,4 +1,4 @@
-use crate::uefi::data_types::basic_types::EFI_GUID;
+use crate::uefi::data_type::basic_type::EFI_GUID;
 
 pub const EFI_LOADED_IMAGE_PROTOCOL_GUID: EFI_GUID = EFI_GUID::new(
     0x5B1B31A1,
