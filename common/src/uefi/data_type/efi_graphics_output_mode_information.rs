@@ -1,29 +1,29 @@
-use crate::uefi::data_type::basic_type::{EFI_GRAPHICS_PIXEL_FORMAT, UnsignedInt32};
+use super::basic_type::{EfiGraphicsPixelFormat, UnsignedInt32};
 
 use super::efi_pixel_bitmask::EfiPixelBitmask;
 
 #[repr(C)]
-pub struct EFI_GRAPHICS_OUTPUT_MODE_INFORMATION {
-    Version: UnsignedInt32,
-    HorizontalResolution: UnsignedInt32,
-    VerticalResolution: UnsignedInt32,
-    PixelFormat: EFI_GRAPHICS_PIXEL_FORMAT,
-    PixelInformation: EfiPixelBitmask,
-    PixelsPerScanLine: UnsignedInt32,
+pub struct EfiGraphicsOutputModeInformation {
+    version: UnsignedInt32,
+    horizontal_resolution: UnsignedInt32,
+    vertical_resolution: UnsignedInt32,
+    pixel_format: EfiGraphicsPixelFormat,
+    pixel_information: EfiPixelBitmask,
+    pixels_per_scan_line: UnsignedInt32,
 }
 
-impl EFI_GRAPHICS_OUTPUT_MODE_INFORMATION {
+impl EfiGraphicsOutputModeInformation {
     pub fn horizontal_resolution(&self) -> UnsignedInt32 {
-        self.HorizontalResolution
+        self.horizontal_resolution
     }
     pub fn vertical_resolution(&self) -> UnsignedInt32 {
-        self.VerticalResolution
+        self.vertical_resolution
     }
-    pub fn pixel_format(&self) -> EFI_GRAPHICS_PIXEL_FORMAT {
-        self.PixelFormat
+    pub fn pixel_format(&self) -> EfiGraphicsPixelFormat {
+        self.pixel_format
     }
 
     pub fn pixels_per_scan_line(&self) -> UnsignedInt32 {
-        self.PixelsPerScanLine
+        self.pixels_per_scan_line
     }
 }

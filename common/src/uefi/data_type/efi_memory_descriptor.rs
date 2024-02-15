@@ -1,30 +1,28 @@
-use crate::uefi::data_type::basic_type::{
-    EFI_PHYSICAL_ADDRESS, EFI_VIRTUAL_ADDRESS, UnsignedInt32, UnsignedInt64,
-};
+use super::basic_type::{EfiPhysicalAddress, EfiVirtualAddress, UnsignedInt32, UnsignedInt64};
 
 #[repr(C)]
-pub struct EFI_MEMORY_DESCRIPTOR {
-    Type: UnsignedInt32,
-    PhysicalStart: EFI_PHYSICAL_ADDRESS,
-    VirtualStart: EFI_VIRTUAL_ADDRESS,
-    NumberOfPages: UnsignedInt64,
-    Attribute: UnsignedInt64,
+pub struct EfiMemoryDescriptor {
+    r#type: UnsignedInt32,
+    physical_start: EfiPhysicalAddress,
+    virtual_start: EfiVirtualAddress,
+    number_of_pages: UnsignedInt64,
+    attribute: UnsignedInt64,
 }
 
-impl EFI_MEMORY_DESCRIPTOR {
+impl EfiMemoryDescriptor {
     pub fn r#type(&self) -> UnsignedInt32 {
-        self.Type
+        self.r#type
     }
-    pub fn physical_start(&self) -> EFI_PHYSICAL_ADDRESS {
-        self.PhysicalStart
+    pub fn physical_start(&self) -> EfiPhysicalAddress {
+        self.physical_start
     }
-    pub fn virtual_start(&self) -> EFI_VIRTUAL_ADDRESS {
-        self.VirtualStart
+    pub fn virtual_start(&self) -> EfiVirtualAddress {
+        self.virtual_start
     }
     pub fn number_of_pages(&self) -> UnsignedInt64 {
-        self.NumberOfPages
+        self.number_of_pages
     }
     pub fn attribute(&self) -> UnsignedInt64 {
-        self.Attribute
+        self.attribute
     }
 }

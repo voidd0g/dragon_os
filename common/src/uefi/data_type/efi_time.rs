@@ -1,16 +1,16 @@
-use crate::uefi::data_type::basic_type::{Int16, UnsignedInt16, UnsignedInt32, UnsignedInt8};
+use super::basic_type::{Int16, UnsignedInt16, UnsignedInt32, UnsignedInt8};
 
 #[repr(C)]
-pub struct EFI_TIME {
-    Year: UnsignedInt16,
-    Month: UnsignedInt8,
-    Day: UnsignedInt8,
-    Hour: UnsignedInt8,
-    Minute: UnsignedInt8,
-    Second: UnsignedInt8,
-    Pad1: UnsignedInt8,
-    Nanosecond: UnsignedInt32,
-    TimeZone: Int16,
-    Daylight: UnsignedInt8,
-    Pad2: UnsignedInt8,
+pub struct EfiTime {
+    year: UnsignedInt16,
+    month: UnsignedInt8,
+    day: UnsignedInt8,
+    hour: UnsignedInt8,
+    minute: UnsignedInt8,
+    second: UnsignedInt8,
+    pad1: UnsignedInt8,
+    nanosecond: UnsignedInt32,
+    time_zone: Int16,
+    daylight: UnsignedInt8,
+    pad2: UnsignedInt8,
 }

@@ -1,34 +1,36 @@
 use crate::uefi::{
-    data_type::basic_type::{EfiHandle, EFI_MEMORY_TYPE, EfiStatus, UnsignedInt32, UnsignedInt64, Void},
+    data_type::basic_type::{
+        EfiHandle, EfiMemoryType, EfiStatus, UnsignedInt32, UnsignedInt64, Void,
+    },
     table::efi_system_table::EfiSystemTable,
 };
 
-use super::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL;
+use super::efi_device_path_protocol::EfiDevicePathProtocol;
 
-type EfiImageUnload = unsafe extern "efiapi" fn(ImageHandle: EfiHandle) -> EfiStatus;
+type EfiImageUnload = unsafe extern "efiapi" fn(image_handle: EfiHandle) -> EfiStatus;
 
 #[repr(C)]
 pub struct EfiLoadedImageProtocol {
-    Revision: UnsignedInt32,
-    ParentHandle: EfiHandle,
-    SystemTable: *const EfiSystemTable,
+    revision: UnsignedInt32,
+    parent_handle: EfiHandle,
+    system_table: *const EfiSystemTable,
 
-    DeviceHandle: EfiHandle,
-    FilePath: *const EFI_DEVICE_PATH_PROTOCOL,
-    Reserved: *const Void,
+    device_handle: EfiHandle,
+    file_path: *const EfiDevicePathProtocol,
+    reserved: *const Void,
 
-    LoadOptionsSize: UnsignedInt32,
-    LoadOptions: *const Void,
+    load_options_size: UnsignedInt32,
+    load_options: *const Void,
 
-    ImageBase: *const Void,
-    ImageSize: UnsignedInt64,
-    ImageCodeType: EFI_MEMORY_TYPE,
-    ImageDataType: EFI_MEMORY_TYPE,
-    Unload: EfiImageUnload,
+    image_base: *const Void,
+    image_size: UnsignedInt64,
+    image_code_type: EfiMemoryType,
+    image_data_type: EfiMemoryType,
+    unload: EfiImageUnload,
 }
 
 impl EfiLoadedImageProtocol {
     pub fn device_handle(&self) -> EfiHandle {
-        self.DeviceHandle
+        self.device_handle
     }
 }

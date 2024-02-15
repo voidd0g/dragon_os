@@ -1,7 +1,7 @@
-use crate::uefi::data_type::basic_type::{Char16, UnsignedInt16};
+use super::basic_type::{Char16, UnsignedInt16};
 
 #[repr(C)]
-pub struct EFI_INPUT_KEY {
-    ScanCode: UnsignedInt16,
-    UnicodeChar: Char16,
+pub struct EfiInputKey {
+    scan_code: UnsignedInt16,
+    unicode_char: Char16,
 }

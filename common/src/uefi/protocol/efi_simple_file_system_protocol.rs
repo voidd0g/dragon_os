@@ -5,23 +5,23 @@ use crate::uefi::{
     data_type::basic_type::{EfiStatus, UnsignedInt64},
 };
 
-use super::efi_file_protocol::EFI_FILE_PROTOCOL;
+use super::efi_file_protocol::EfiFileProtocol;
 
-type EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_OPEN_VOLUME = unsafe extern "efiapi" fn(
-    This: *const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,
-    RootOut: *mut *const EFI_FILE_PROTOCOL,
+type EfiSimpleFileSystemProtocolOpenVolume = unsafe extern "efiapi" fn(
+    this: *const EfiSimpleFileSystemProtocol,
+    root_out: *mut *const EfiFileProtocol,
 ) -> EfiStatus;
 
 #[repr(C)]
-pub struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
-    Revision: UnsignedInt64,
-    OpenVolume: EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_OPEN_VOLUME,
+pub struct EfiSimpleFileSystemProtocol {
+    revision: UnsignedInt64,
+    open_volume: EfiSimpleFileSystemProtocolOpenVolume,
 }
 
-impl EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
-    pub fn open_volume(&self) -> Result<&EFI_FILE_PROTOCOL, EfiStatus> {
+impl EfiSimpleFileSystemProtocol {
+    pub fn open_volume(&self) -> Result<&EfiFileProtocol, EfiStatus> {
         let mut root_out = null();
-        let status = unsafe { (self.OpenVolume)(self, &mut root_out) };
+        let status = unsafe { (self.open_volume)(self, &mut root_out) };
         match status {
             EFI_SUCCESS => Ok(unsafe { root_out.as_ref() }.unwrap()),
             v => Err(v),

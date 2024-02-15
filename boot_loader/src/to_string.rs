@@ -1,8 +1,8 @@
 use core::slice;
 
 use common::uefi::{
-    constant::efi_memory_type::EfiLoaderData,
-    data_type::basic_type::{CHAR16, EFI_STATUS},
+    constant::efi_memory_type::EFI_LOADER_DATA,
+    data_type::basic_type::{Char16, EfiStatus},
     table::efi_boot_services::EFI_BOOT_SERVICES,
 };
 
@@ -10,14 +10,14 @@ pub trait ToString {
     fn to_string<'a>(
         &self,
         boot_services: &'a EFI_BOOT_SERVICES,
-    ) -> Result<&'a [CHAR16], EFI_STATUS>;
+    ) -> Result<&'a [Char16], EfiStatus>;
 }
 
 impl ToString for (u64, u8) {
     fn to_string<'a>(
         &self,
         boot_services: &'a EFI_BOOT_SERVICES,
-    ) -> Result<&'a [CHAR16], EFI_STATUS> {
+    ) -> Result<&'a [Char16], EfiStatus> {
         let (efi_status, base) = self;
         let (efi_status, base) = (*efi_status, *base);
         let mut mult = efi_status;
@@ -29,20 +29,20 @@ impl ToString for (u64, u8) {
                 break 'b ();
             }
         }
-        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+        let buf = match boot_services.allocate_pool(EFI_LOADER_DATA, len * 2) {
             Ok(buf) => buf,
             Err(v) => return Err(v),
         };
-        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
+        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut Char16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
         let mut num = efi_status;
         for _ in 0..len - 1 {
             let digit = num as u8 % base as u8;
             if digit < 10 {
-                *iter.next().unwrap() = ('0' as u8 + digit) as CHAR16;
+                *iter.next().unwrap() = ('0' as u8 + digit) as Char16;
             } else {
-                *iter.next().unwrap() = ('A' as u8 + digit - 10) as CHAR16;
+                *iter.next().unwrap() = ('A' as u8 + digit - 10) as Char16;
             }
             num /= base as u64;
         }
@@ -54,7 +54,7 @@ impl ToString for (usize, u8) {
     fn to_string<'a>(
         &self,
         boot_services: &'a EFI_BOOT_SERVICES,
-    ) -> Result<&'a [CHAR16], EFI_STATUS> {
+    ) -> Result<&'a [Char16], EfiStatus> {
         let (efi_status, base) = self;
         let (efi_status, base) = (*efi_status, *base);
         let mut mult = efi_status;
@@ -66,20 +66,20 @@ impl ToString for (usize, u8) {
                 break 'b ();
             }
         }
-        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+        let buf = match boot_services.allocate_pool(EFI_LOADER_DATA, len * 2) {
             Ok(buf) => buf,
             Err(v) => return Err(v),
         };
-        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
+        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut Char16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
         let mut num = efi_status;
         for _ in 0..len - 1 {
             let digit = num as u8 % base as u8;
             if digit < 10 {
-                *iter.next().unwrap() = ('0' as u8 + digit) as CHAR16;
+                *iter.next().unwrap() = ('0' as u8 + digit) as Char16;
             } else {
-                *iter.next().unwrap() = ('A' as u8 + digit - 10) as CHAR16;
+                *iter.next().unwrap() = ('A' as u8 + digit - 10) as Char16;
             }
             num /= base as usize;
         }
@@ -91,7 +91,7 @@ impl ToString for (u32, u8) {
     fn to_string<'a>(
         &self,
         boot_services: &'a EFI_BOOT_SERVICES,
-    ) -> Result<&'a [CHAR16], EFI_STATUS> {
+    ) -> Result<&'a [Char16], EfiStatus> {
         let (efi_status, base) = self;
         let (efi_status, base) = (*efi_status, *base);
         let mut mult = efi_status;
@@ -103,20 +103,20 @@ impl ToString for (u32, u8) {
                 break 'b ();
             }
         }
-        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+        let buf = match boot_services.allocate_pool(EFI_LOADER_DATA, len * 2) {
             Ok(buf) => buf,
             Err(v) => return Err(v),
         };
-        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
+        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut Char16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
         let mut num = efi_status;
         for _ in 0..len - 1 {
             let digit = num as u8 % base as u8;
             if digit < 10 {
-                *iter.next().unwrap() = ('0' as u8 + digit) as CHAR16;
+                *iter.next().unwrap() = ('0' as u8 + digit) as Char16;
             } else {
-                *iter.next().unwrap() = ('A' as u8 + digit - 10) as CHAR16;
+                *iter.next().unwrap() = ('A' as u8 + digit - 10) as Char16;
             }
             num /= base as u32;
         }
@@ -128,7 +128,7 @@ impl ToString for (i32, u8) {
     fn to_string<'a>(
         &self,
         boot_services: &'a EFI_BOOT_SERVICES,
-    ) -> Result<&'a [CHAR16], EFI_STATUS> {
+    ) -> Result<&'a [Char16], EfiStatus> {
         let (efi_status, base) = self;
         let (efi_status, base) = (*efi_status, *base);
         let mut mult = efi_status;
@@ -140,20 +140,20 @@ impl ToString for (i32, u8) {
                 break 'b ();
             }
         }
-        let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+        let buf = match boot_services.allocate_pool(EFI_LOADER_DATA, len * 2) {
             Ok(buf) => buf,
             Err(v) => return Err(v),
         };
-        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
+        let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut Char16, len) };
         let mut iter = buf.iter_mut().rev();
         *iter.next().unwrap() = 0;
         let mut num = efi_status;
         for _ in 0..len - 1 {
             let digit = num as u8 % base as u8;
             if digit < 10 {
-                *iter.next().unwrap() = ('0' as u8 + digit) as CHAR16;
+                *iter.next().unwrap() = ('0' as u8 + digit) as Char16;
             } else {
-                *iter.next().unwrap() = ('A' as u8 + digit - 10) as CHAR16;
+                *iter.next().unwrap() = ('A' as u8 + digit - 10) as Char16;
             }
             num /= base as i32;
         }

@@ -1,15 +1,16 @@
-use crate::uefi::data_type::basic_type::{Char16, UnsignedInt64};
-
-use super::efi_time::EFI_TIME;
+use super::{
+    basic_type::{Char16, UnsignedInt64},
+    efi_time::EfiTime,
+};
 
 #[repr(C)]
 pub struct EfiFileInfo {
     size: UnsignedInt64,
     file_size: UnsignedInt64,
     physical_size: UnsignedInt64,
-    create_time: EFI_TIME,
-    last_access_time: EFI_TIME,
-    modification_time: EFI_TIME,
+    create_time: EfiTime,
+    last_access_time: EfiTime,
+    modification_time: EfiTime,
     attribute: UnsignedInt64,
     file_name: *const Char16,
 }

@@ -1,44 +1,44 @@
 use crate::uefi::data_type::{
     basic_type::{Boolean, Char16, EfiStatus, UnsignedIntNative},
-    simple_text_output_mode::SIMPLE_TEXT_OUTPUT_MODE,
+    simple_text_output_mode::SimpleTextOutputMode,
 };
 
 type EfiTextReset = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    ExtendedVerification: Boolean,
+    this: *const EfiSimpleTextOutputProtocol,
+    extended_verification: Boolean,
 ) -> EfiStatus;
 type EfiTextString = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    String: *const Char16,
+    this: *const EfiSimpleTextOutputProtocol,
+    string: *const Char16,
 ) -> EfiStatus;
 type EfiTextTestString = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    String: *const Char16,
+    this: *const EfiSimpleTextOutputProtocol,
+    string: *const Char16,
 ) -> EfiStatus;
 type EfiTextQueryMode = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    ModeNumber: UnsignedIntNative,
-    ColumnsOut: *mut UnsignedIntNative,
-    Rows: *mut UnsignedIntNative,
+    this: *const EfiSimpleTextOutputProtocol,
+    mode_number: UnsignedIntNative,
+    columns_out: *mut UnsignedIntNative,
+    rows: *mut UnsignedIntNative,
 ) -> EfiStatus;
 type EfiTextSetMode = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    ModeNumber: UnsignedIntNative,
+    this: *const EfiSimpleTextOutputProtocol,
+    mode_number: UnsignedIntNative,
 ) -> EfiStatus;
 type EfiTextSetAttribute = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    Attribute: UnsignedIntNative,
+    this: *const EfiSimpleTextOutputProtocol,
+    attribute: UnsignedIntNative,
 ) -> EfiStatus;
 type EfiTextClearScreen =
-    unsafe extern "efiapi" fn(This: *const EfiSimpleTextOutputProtocol) -> EfiStatus;
+    unsafe extern "efiapi" fn(this: *const EfiSimpleTextOutputProtocol) -> EfiStatus;
 type EfiTextSetCursorPosition = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    Column: UnsignedIntNative,
-    Row: UnsignedIntNative,
+    this: *const EfiSimpleTextOutputProtocol,
+    column: UnsignedIntNative,
+    row: UnsignedIntNative,
 ) -> EfiStatus;
 type EfiTextEnableCursor = unsafe extern "efiapi" fn(
-    This: *const EfiSimpleTextOutputProtocol,
-    Visible: Boolean,
+    this: *const EfiSimpleTextOutputProtocol,
+    visible: Boolean,
 ) -> EfiStatus;
 
 #[repr(C)]
@@ -52,7 +52,7 @@ pub struct EfiSimpleTextOutputProtocol {
     clear_screen: EfiTextClearScreen,
     set_cursor_position: EfiTextSetCursorPosition,
     enable_cursor: EfiTextEnableCursor,
-    mode: *const SIMPLE_TEXT_OUTPUT_MODE,
+    mode: *const SimpleTextOutputMode,
 }
 
 impl EfiSimpleTextOutputProtocol {

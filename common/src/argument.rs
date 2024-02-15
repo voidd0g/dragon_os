@@ -1,6 +1,8 @@
 use core::slice;
 
-use crate::uefi::data_type::basic_type::{EFI_GRAPHICS_PIXEL_FORMAT, UnsignedInt32, UnsignedInt8, UnsignedIntNative};
+use crate::uefi::data_type::basic_type::{
+    EfiGraphicsPixelFormat, UnsignedInt32, UnsignedInt8, UnsignedIntNative,
+};
 
 #[repr(C)]
 pub struct Argument {
@@ -26,7 +28,7 @@ pub struct FrameBufferConfig {
     pixels_per_scan_line: UnsignedInt32,
     horizontal_resolution: UnsignedInt32,
     vertical_resolution: UnsignedInt32,
-    pixel_format: EFI_GRAPHICS_PIXEL_FORMAT,
+    pixel_format: EfiGraphicsPixelFormat,
 }
 
 impl FrameBufferConfig {
@@ -36,7 +38,7 @@ impl FrameBufferConfig {
         pixels_per_scan_line: UnsignedInt32,
         horizontal_resolution: UnsignedInt32,
         vertical_resolution: UnsignedInt32,
-        pixel_format: EFI_GRAPHICS_PIXEL_FORMAT,
+        pixel_format: EfiGraphicsPixelFormat,
     ) -> Self {
         Self {
             frame_buffer,
@@ -64,7 +66,7 @@ impl FrameBufferConfig {
         self.vertical_resolution
     }
 
-    pub fn pixel_format(&self) -> EFI_GRAPHICS_PIXEL_FORMAT {
+    pub fn pixel_format(&self) -> EfiGraphicsPixelFormat {
         self.pixel_format
     }
 }

@@ -1,7 +1,7 @@
-use super::{efi_input_key::EFI_INPUT_KEY, efi_key_state::EFI_KEY_STATE};
+use super::{efi_input_key::EfiInputKey, efi_key_state::EfiKeyState};
 
 #[repr(C)]
-pub struct EFI_KEY_DATA {
-    Key: EFI_INPUT_KEY,
-    KeyState: EFI_KEY_STATE,
+pub struct EfiKeyData {
+    key: EfiInputKey,
+    key_state: EfiKeyState,
 }

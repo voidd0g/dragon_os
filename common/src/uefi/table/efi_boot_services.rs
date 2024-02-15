@@ -7,292 +7,296 @@ use crate::uefi::{
     constant::efi_status::EFI_SUCCESS,
     data_type::{
         basic_type::{
-            Boolean, Char16, C_VARIABLE_ARGUMENT, EFI_ALLOCATE_TYPE, EFI_EVENT, EFI_GUID,
-            EfiHandle, EFI_INTERFACE_TYPE, EFI_LOCATE_SEARCH_TYPE, EFI_MEMORY_TYPE,
-            EFI_PHYSICAL_ADDRESS, EfiStatus, EFI_TIMER_DELAY, EFI_TPL, UnsignedInt32, UnsignedInt64, UnsignedInt8,
+            Boolean, CVariableLengthArgument, Char16, EfiAllocateType, EfiEvent, EfiGuid,
+            EfiHandle, EfiInterfaceType, EfiLocateSearchType, EfiMemoryType, EfiPhysicalAddress,
+            EfiStatus, EfiTimerDelay, EfiTpl, UnsignedInt32, UnsignedInt64, UnsignedInt8,
             UnsignedIntNative, Void,
         },
         {
-            efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR,
-            efi_open_protocol_information_entry::EFI_OPEN_PROTOCOL_INFORMATION_ENTRY,
+            efi_memory_descriptor::EfiMemoryDescriptor,
+            efi_open_protocol_information_entry::EfiOpenProtocolInformationEntry,
         },
     },
-    protocol::efi_device_path_protocol::EFI_DEVICE_PATH_PROTOCOL,
+    protocol::efi_device_path_protocol::EfiDevicePathProtocol,
 };
 
 use super::efi_table_header::EfiTableHeader;
 
-type EFI_RAISE_TPL = unsafe extern "efiapi" fn(NewTpl: EFI_TPL) -> EFI_TPL;
-type EFI_RESTORE_TPL = unsafe extern "efiapi" fn(OldTpl: EFI_TPL) -> Void;
+type EfiRaiseTpl = unsafe extern "efiapi" fn(new_tpl: EfiTpl) -> EfiTpl;
+type EfiRestoreTpl = unsafe extern "efiapi" fn(old_tpl: EfiTpl) -> Void;
 
-type EFI_ALLOCATE_PAGES = unsafe extern "efiapi" fn(
-    Type: EFI_ALLOCATE_TYPE,
-    MemoryType: EFI_MEMORY_TYPE,
-    Pages: UnsignedIntNative,
-    MemoryInOut: *mut EFI_PHYSICAL_ADDRESS,
+type EfiAllocatePages = unsafe extern "efiapi" fn(
+    r#type: EfiAllocateType,
+    memory_type: EfiMemoryType,
+    pages: UnsignedIntNative,
+    memory_in_out: *mut EfiPhysicalAddress,
 ) -> EfiStatus;
-type EFI_FREE_PAGES =
-    unsafe extern "efiapi" fn(Memory: EFI_PHYSICAL_ADDRESS, Pages: UnsignedIntNative) -> EfiStatus;
-type EFI_GET_MEMORY_MAP = unsafe extern "efiapi" fn(
-    MemoryMapSizeInOut: *mut UnsignedIntNative,
-    MemoryMapOut: *mut EFI_MEMORY_DESCRIPTOR,
-    MapKeyOut: *mut UnsignedIntNative,
-    DescriptorSizeOut: *mut UnsignedIntNative,
-    DescriptorVersionOut: *mut UnsignedInt32,
+type EfiFreePages =
+    unsafe extern "efiapi" fn(memory: EfiPhysicalAddress, pages: UnsignedIntNative) -> EfiStatus;
+type EfiGetMemoryMap = unsafe extern "efiapi" fn(
+    memory_map_size_in_out: *mut UnsignedIntNative,
+    memory_map_out: *mut EfiMemoryDescriptor,
+    map_key_out: *mut UnsignedIntNative,
+    descriptor_size_out: *mut UnsignedIntNative,
+    descriptor_version_out: *mut UnsignedInt32,
 ) -> EfiStatus;
-type EFI_ALLOCATE_POOL = unsafe extern "efiapi" fn(
-    PoolType: EFI_MEMORY_TYPE,
-    Size: UnsignedIntNative,
-    BufferOut: *mut *const Void,
+type EfiAllocatePool = unsafe extern "efiapi" fn(
+    pool_type: EfiMemoryType,
+    size: UnsignedIntNative,
+    buffer_out: *mut *const Void,
 ) -> EfiStatus;
-type EFI_FREE_POOL = unsafe extern "efiapi" fn(Buffer: *const Void) -> EfiStatus;
+type EfiFreePool = unsafe extern "efiapi" fn(buffer: *const Void) -> EfiStatus;
 
-type EFI_CREATE_EVENT = unsafe extern "efiapi" fn(
-    Type: UnsignedInt32,
-    NotifyTpl: EFI_TPL,
-    NotifyFunctionOptional: Option<EFI_EVENT_NOTIFY>,
-    NotifyContextOptional: *const Void,
-    EventOut: *mut EFI_EVENT,
+type EfiCreateEvent = unsafe extern "efiapi" fn(
+    r#type: UnsignedInt32,
+    notify_tpl: EfiTpl,
+    notify_function_optional: Option<EfiEventNotify>,
+    notify_context_optional: *const Void,
+    event_out: *mut EfiEvent,
 ) -> EfiStatus;
-type EFI_EVENT_NOTIFY = unsafe extern "efiapi" fn(Event: EFI_EVENT, Context: *const Void) -> Void;
-type EFI_SET_TIMER = unsafe extern "efiapi" fn(
-    Event: EFI_EVENT,
-    Type: EFI_TIMER_DELAY,
-    TriggerTime: UnsignedInt64,
+type EfiEventNotify = unsafe extern "efiapi" fn(event: EfiEvent, context: *const Void) -> Void;
+type EfiSetTimer = unsafe extern "efiapi" fn(
+    event: EfiEvent,
+    r#type: EfiTimerDelay,
+    trigger_time: UnsignedInt64,
 ) -> EfiStatus;
-type EFI_WAIT_FOR_EVENT = unsafe extern "efiapi" fn(
-    NumberOfEvents: UnsignedIntNative,
-    Event: *const EFI_EVENT,
-    IndexOut: *mut UnsignedIntNative,
+type EfiWaitForEvent = unsafe extern "efiapi" fn(
+    number_of_events: UnsignedIntNative,
+    event: *const EfiEvent,
+    index_out: *mut UnsignedIntNative,
 ) -> EfiStatus;
-type EFI_SIGNAL_EVENT = unsafe extern "efiapi" fn(Event: EFI_EVENT) -> EfiStatus;
-type EFI_CLOSE_EVENT = unsafe extern "efiapi" fn(Event: EFI_EVENT) -> EfiStatus;
-type EFI_CHECK_EVENT = unsafe extern "efiapi" fn(Event: EFI_EVENT) -> EfiStatus;
+type EfiSignalEvent = unsafe extern "efiapi" fn(event: EfiEvent) -> EfiStatus;
+type EfiCloseEvent = unsafe extern "efiapi" fn(event: EfiEvent) -> EfiStatus;
+type EfiCheckEvent = unsafe extern "efiapi" fn(event: EfiEvent) -> EfiStatus;
 
-type EFI_INSTALL_PROTOCOL_INTERFACE = unsafe extern "efiapi" fn(
-    HandleInOut: *mut EfiHandle,
-    Protocol: *const EFI_GUID,
-    InterfaceType: EFI_INTERFACE_TYPE,
-    Interface: *const Void,
+type EfiInstallProtocolInterface = unsafe extern "efiapi" fn(
+    handle_in_out: *mut EfiHandle,
+    protocol: *const EfiGuid,
+    interface_type: EfiInterfaceType,
+    interface: *const Void,
 ) -> EfiStatus;
-type EFI_REINSTALL_PROTOCOL_INTERFACE = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    Protocol: *const EFI_GUID,
-    OldInterface: *const Void,
-    NewInterface: *const Void,
+type EfiReinstallProtocolInterface = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol: *const EfiGuid,
+    old_interface: *const Void,
+    new_interface: *const Void,
 ) -> EfiStatus;
-type EFI_UNINSTALL_PROTOCOL_INTERFACE = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    Protocol: *const EFI_GUID,
-    Interface: *const Void,
+type EfiUninstallProtocolInterface = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol: *const EfiGuid,
+    interface: *const Void,
 ) -> EfiStatus;
-type EFI_HANDLE_PROTOCOL = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    Protocol: *const EFI_GUID,
-    InterfaceOut: *mut *const Void,
+type EfiHandleProtocol = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol: *const EfiGuid,
+    interface_out: *mut *const Void,
 ) -> EfiStatus;
-type EFI_REGISTER_PROTOCOL_NOTIFY = unsafe extern "efiapi" fn(
-    Protocol: *const EFI_GUID,
-    Event: EFI_EVENT,
-    RegistrationOut: *mut *const Void,
+type EfiRegisterProtocolNotify = unsafe extern "efiapi" fn(
+    protocol: *const EfiGuid,
+    event: EfiEvent,
+    registration_out: *mut *const Void,
 ) -> EfiStatus;
-type EFI_LOCATE_HANDLE = unsafe extern "efiapi" fn(
-    SearchType: EFI_LOCATE_SEARCH_TYPE,
-    ProtocolOpttional: *const EFI_GUID,
-    SearchKeyOptional: *const Void,
-    BufferSizeOut: *mut UnsignedIntNative,
-    BufferOut: *mut EfiHandle,
+type EfiLocateHandle = unsafe extern "efiapi" fn(
+    search_type: EfiLocateSearchType,
+    protocol_opttional: *const EfiGuid,
+    search_key_optional: *const Void,
+    buffer_size_out: *mut UnsignedIntNative,
+    buffer_out: *mut EfiHandle,
 ) -> EfiStatus;
-type EFI_LOCATE_DEVICE_PATH = unsafe extern "efiapi" fn(
-    Protocol: *const EFI_GUID,
-    DevicePath: *const *const EFI_DEVICE_PATH_PROTOCOL,
-    DeviceOut: *mut EfiHandle,
+type EfiLocateDevicePath = unsafe extern "efiapi" fn(
+    protocol: *const EfiGuid,
+    device_path: *const *const EfiDevicePathProtocol,
+    device_out: *mut EfiHandle,
 ) -> EfiStatus;
-type EFI_INSTALL_CONFIGURATION_TABLE =
-    unsafe extern "efiapi" fn(Guid: *const EFI_GUID, Table: *const Void) -> EfiStatus;
+type EfiInstallConfigurationTable =
+    unsafe extern "efiapi" fn(guid: *const EfiGuid, table: *const Void) -> EfiStatus;
 
-type EFI_IMAGE_LOAD = unsafe extern "efiapi" fn(
-    BootPolicy: Boolean,
-    ParentImageHandle: EfiHandle,
-    DevicePathOptional: *const EFI_DEVICE_PATH_PROTOCOL,
-    SourceBufferOptional: *const Void,
-    SourceSize: UnsignedIntNative,
-    ImageHandleOut: *mut EfiHandle,
+type EfiImageLoad = unsafe extern "efiapi" fn(
+    boot_policy: Boolean,
+    parent_image_handle: EfiHandle,
+    device_path_optional: *const EfiDevicePathProtocol,
+    source_buffer_optional: *const Void,
+    source_size: UnsignedIntNative,
+    image_handle_out: *mut EfiHandle,
 ) -> EfiStatus;
-type EFI_IMAGE_START = unsafe extern "efiapi" fn(
-    ImageHandle: EfiHandle,
-    ExitDataSizeOut: *mut UnsignedIntNative,
-    ExitDataOutOptional: *mut *const Char16,
+type EfiImageStart = unsafe extern "efiapi" fn(
+    image_handle: EfiHandle,
+    exit_data_size_out: *mut UnsignedIntNative,
+    exit_data_out_optional: *mut *const Char16,
 ) -> EfiStatus;
-type EFI_EXIT = unsafe extern "efiapi" fn(
-    ImageHandle: EfiHandle,
-    ExitStatus: EfiStatus,
-    ExitDataSize: UnsignedIntNative,
-    ExitDataOptional: *const Char16,
+type EfiExit = unsafe extern "efiapi" fn(
+    image_handle: EfiHandle,
+    exit_status: EfiStatus,
+    exit_data_size: UnsignedIntNative,
+    exit_data_optional: *const Char16,
 ) -> EfiStatus;
-type EFI_IMAGE_UNLOAD = unsafe extern "efiapi" fn(ImageHandle: EfiHandle) -> EfiStatus;
-type EFI_EXIT_BOOT_SERVICES =
-    unsafe extern "efiapi" fn(ImageHandle: EfiHandle, MapKey: UnsignedIntNative) -> EfiStatus;
+type EfiImageUnload = unsafe extern "efiapi" fn(image_handle: EfiHandle) -> EfiStatus;
+type EfiExitBootServices =
+    unsafe extern "efiapi" fn(image_handle: EfiHandle, map_key: UnsignedIntNative) -> EfiStatus;
 
-type EFI_GET_NEXT_MONOTONIC_COUNT = unsafe extern "efiapi" fn(CountOut: *mut UnsignedInt64) -> EfiStatus;
-type EFI_STALL = unsafe extern "efiapi" fn(Microseconds: UnsignedIntNative) -> EfiStatus;
-type EFI_SET_WATCHDOG_TIMER = unsafe extern "efiapi" fn(
-    Timeout: UnsignedIntNative,
-    WatchdogCode: UnsignedInt64,
-    DataSize: UnsignedIntNative,
-    WatchdogDataOptional: *const Char16,
-) -> EfiStatus;
-
-type EFI_CONNECT_CONTROLLER = unsafe extern "efiapi" fn(
-    ControllerHandle: EfiHandle,
-    DriverImageHandleOptional: *const EfiHandle,
-    RemainingDevicePathOptional: *const EFI_DEVICE_PATH_PROTOCOL,
-    Recursive: Boolean,
-) -> EfiStatus;
-type EFI_DISCONNECT_CONTROLLER = unsafe extern "efiapi" fn(
-    ControllerHandle: EfiHandle,
-    DriverImageHandleOptional: EfiHandle,
-    ChildHandleOptional: EfiHandle,
+type EfiGetNextMonotonicCount =
+    unsafe extern "efiapi" fn(count_out: *mut UnsignedInt64) -> EfiStatus;
+type EfiStall = unsafe extern "efiapi" fn(microseconds: UnsignedIntNative) -> EfiStatus;
+type EfiSetWatchdogTimer = unsafe extern "efiapi" fn(
+    timeout: UnsignedIntNative,
+    watchdog_code: UnsignedInt64,
+    data_size: UnsignedIntNative,
+    watchdog_data_optional: *const Char16,
 ) -> EfiStatus;
 
-type EFI_OPEN_PROTOCOL = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    Protocol: *const EFI_GUID,
-    InterfaceOutOptional: *mut *const Void,
-    AgentHandle: EfiHandle,
-    ControllerHandle: EfiHandle,
-    Attributes: UnsignedInt32,
+type EfiConnectController = unsafe extern "efiapi" fn(
+    controller_handle: EfiHandle,
+    driver_image_handle_optional: *const EfiHandle,
+    remaining_device_path_optional: *const EfiDevicePathProtocol,
+    recursive: Boolean,
 ) -> EfiStatus;
-type EFI_CLOSE_PROTOCOL = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    Protocol: *const EFI_GUID,
-    AgentHandle: EfiHandle,
-    ControllerHandle: EfiHandle,
-) -> EfiStatus;
-type EFI_OPEN_PROTOCOL_INFORMATION = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    Protocol: *const EFI_GUID,
-    EntryBufferOut: *mut *const EFI_OPEN_PROTOCOL_INFORMATION_ENTRY,
-    EntryCountOut: *mut UnsignedIntNative,
+type EfiDisconnectController = unsafe extern "efiapi" fn(
+    controller_handle: EfiHandle,
+    driver_image_handle_optional: EfiHandle,
+    child_handle_optional: EfiHandle,
 ) -> EfiStatus;
 
-type EFI_PROTOCOLS_PER_HANDLE = unsafe extern "efiapi" fn(
-    Handle: EfiHandle,
-    ProtocolBufferOut: *mut *const *const EFI_GUID,
-    ProtocolBufferCount: *mut UnsignedIntNative,
+type EfiOpenProtocol = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol: *const EfiGuid,
+    interface_out_optional: *mut *const Void,
+    agent_handle: EfiHandle,
+    controller_handle: EfiHandle,
+    attributes: UnsignedInt32,
 ) -> EfiStatus;
-type EFI_LOCATE_HANDLE_BUFFER = unsafe extern "efiapi" fn(
-    SearchType: EFI_LOCATE_SEARCH_TYPE,
-    ProtocolOptional: *const EFI_GUID,
-    SearchKeyOptional: *const Void,
-    NoHandlesOut: *mut UnsignedIntNative,
-    BufferOut: *mut *const EfiHandle,
+type EfiCloseProtocol = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol: *const EfiGuid,
+    agent_handle: EfiHandle,
+    controller_handle: EfiHandle,
 ) -> EfiStatus;
-type EFI_LOCATE_PROTOCOL = unsafe extern "efiapi" fn(
-    Protocol: *const EFI_GUID,
-    RegistrationOptional: *const Void,
-    InterfaceOut: *mut *const Void,
-) -> EfiStatus;
-type EFI_INSTALL_MULTIPLE_PROTOCOL_INTERFACES = unsafe extern "efiapi" fn(
-    HandleInOut: *mut EfiHandle,
-    c_var_args: C_VARIABLE_ARGUMENT,
-) -> EfiStatus;
-type EFI_UNINSTALL_MULTIPLE_PROTOCOL_INTERFACES =
-    unsafe extern "efiapi" fn(Handle: EfiHandle, c_var_args: C_VARIABLE_ARGUMENT) -> EfiStatus;
-
-type EFI_CALCULATE_CRC32 = unsafe extern "efiapi" fn(
-    Data: *const Void,
-    DataSize: UnsignedIntNative,
-    Crc32Out: *mut UnsignedInt32,
+type EfiOpenProtocolInformation = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol: *const EfiGuid,
+    entry_buffer_out: *mut *const EfiOpenProtocolInformationEntry,
+    entry_count_out: *mut UnsignedIntNative,
 ) -> EfiStatus;
 
-type EFI_COPY_MEM = unsafe extern "efiapi" fn(
-    Destination: *const Void,
-    Source: *const Void,
-    Length: UnsignedIntNative,
+type EfiProtocolsPerHandle = unsafe extern "efiapi" fn(
+    handle: EfiHandle,
+    protocol_buffer_out: *mut *const *const EfiGuid,
+    protocol_buffer_count: *mut UnsignedIntNative,
 ) -> EfiStatus;
-type EFI_SET_MEM =
-    unsafe extern "efiapi" fn(Buffer: *const Void, Size: UnsignedIntNative, Value: UnsignedInt8) -> EfiStatus;
-type EFI_CREATE_EVENT_EX = unsafe extern "efiapi" fn(
-    Type: UnsignedInt32,
-    NotifyTpl: EFI_TPL,
-    NotifyFunctionOptional: Option<EFI_EVENT_NOTIFY>,
-    NotifyContextOptional: *const Void,
-    EventGroupOptional: *const EFI_GUID,
-    EventOut: *mut EFI_EVENT,
+type EfiLocateHandleBuffer = unsafe extern "efiapi" fn(
+    search_type: EfiLocateSearchType,
+    protocol_optional: *const EfiGuid,
+    search_key_optional: *const Void,
+    no_handles_out: *mut UnsignedIntNative,
+    buffer_out: *mut *const EfiHandle,
+) -> EfiStatus;
+type EfiLocateProtocol = unsafe extern "efiapi" fn(
+    protocol: *const EfiGuid,
+    registration_optional: *const Void,
+    interface_out: *mut *const Void,
+) -> EfiStatus;
+type EfiInstallMultipleProtocolInterfaces = unsafe extern "efiapi" fn(
+    handle_in_out: *mut EfiHandle,
+    c_var_args: CVariableLengthArgument,
+) -> EfiStatus;
+type EfiUninstallMultipleProtocolInterfaces =
+    unsafe extern "efiapi" fn(handle: EfiHandle, c_var_args: CVariableLengthArgument) -> EfiStatus;
+
+type EfiCalculateCrc32 = unsafe extern "efiapi" fn(
+    data: *const Void,
+    data_size: UnsignedIntNative,
+    crc32_out: *mut UnsignedInt32,
+) -> EfiStatus;
+
+type EfiCopyMem = unsafe extern "efiapi" fn(
+    destination: *const Void,
+    source: *const Void,
+    length: UnsignedIntNative,
+) -> EfiStatus;
+type EfiSetMem = unsafe extern "efiapi" fn(
+    buffer: *const Void,
+    size: UnsignedIntNative,
+    value: UnsignedInt8,
+) -> EfiStatus;
+type EfiCreateEventEx = unsafe extern "efiapi" fn(
+    r#type: UnsignedInt32,
+    notify_tpl: EfiTpl,
+    notify_function_optional: Option<EfiEventNotify>,
+    notify_context_optional: *const Void,
+    event_group_optional: *const EfiGuid,
+    event_out: *mut EfiEvent,
 ) -> EfiStatus;
 
 /// Documentation is on:
 /// https://uefi.org/specs/UEFI/2.10/04_EFI_System_Table.html#efi-boot-services
 #[repr(C)]
-pub struct EFI_BOOT_SERVICES {
-    Hdr: EfiTableHeader,
+pub struct EfiBootServices {
+    hdr: EfiTableHeader,
 
-    RaiseTPL: EFI_RAISE_TPL,
-    RestoreTPL: EFI_RESTORE_TPL,
+    raise_tpl: EfiRaiseTpl,
+    restore_tpl: EfiRestoreTpl,
 
-    AllocatePages: EFI_ALLOCATE_PAGES,
-    FreePages: EFI_FREE_PAGES,
-    GetMemoryMap: EFI_GET_MEMORY_MAP,
-    AllocatePool: EFI_ALLOCATE_POOL,
-    FreePool: EFI_FREE_POOL,
+    allocate_pages: EfiAllocatePages,
+    free_pages: EfiFreePages,
+    get_memory_map: EfiGetMemoryMap,
+    allocate_pool: EfiAllocatePool,
+    free_pool: EfiFreePool,
 
-    CreateEvent: EFI_CREATE_EVENT,
-    SetTimer: EFI_SET_TIMER,
-    WaitForEvent: EFI_WAIT_FOR_EVENT,
-    SignalEvent: EFI_SIGNAL_EVENT,
-    CloseEvent: EFI_CLOSE_EVENT,
-    CheckEvent: EFI_CHECK_EVENT,
+    create_event: EfiCreateEvent,
+    set_timer: EfiSetTimer,
+    wait_for_event: EfiWaitForEvent,
+    signal_event: EfiSignalEvent,
+    close_event: EfiCloseEvent,
+    check_event: EfiCheckEvent,
 
-    InstallProtocolInterface: EFI_INSTALL_PROTOCOL_INTERFACE,
-    ReinstallProtocolInterface: EFI_REINSTALL_PROTOCOL_INTERFACE,
-    UninstallProtocolInterface: EFI_UNINSTALL_PROTOCOL_INTERFACE,
-    HandleProtocol: EFI_HANDLE_PROTOCOL,
-    Reserved: *const Void,
-    RegisterProtocolNotify: EFI_REGISTER_PROTOCOL_NOTIFY,
-    LocateHandle: EFI_LOCATE_HANDLE,
-    LocateDevicePath: EFI_LOCATE_DEVICE_PATH,
-    InstallConfigurationTable: EFI_INSTALL_CONFIGURATION_TABLE,
+    install_protocol_interface: EfiInstallProtocolInterface,
+    reinstall_protocol_interface: EfiReinstallProtocolInterface,
+    uninstall_protocol_interface: EfiUninstallProtocolInterface,
+    handle_protocol: EfiHandleProtocol,
+    reserved: *const Void,
+    register_protocol_notify: EfiRegisterProtocolNotify,
+    locate_handle: EfiLocateHandle,
+    locate_device_path: EfiLocateDevicePath,
+    install_configuration_table: EfiInstallConfigurationTable,
 
-    LoadImage: EFI_IMAGE_LOAD,
-    StartImage: EFI_IMAGE_START,
-    Exit: EFI_EXIT,
-    UnloadImage: EFI_IMAGE_UNLOAD,
-    ExitBootServices: EFI_EXIT_BOOT_SERVICES,
+    load_image: EfiImageLoad,
+    start_image: EfiImageStart,
+    exit: EfiExit,
+    unload_image: EfiImageUnload,
+    exit_boot_services: EfiExitBootServices,
 
-    GetNextMonotonicCount: EFI_GET_NEXT_MONOTONIC_COUNT,
-    Stall: EFI_STALL,
-    SetWatchdogTimer: EFI_SET_WATCHDOG_TIMER,
+    get_next_monotonic_count: EfiGetNextMonotonicCount,
+    stall: EfiStall,
+    set_watchdog_timer: EfiSetWatchdogTimer,
 
-    ConnectController: EFI_CONNECT_CONTROLLER,
-    DisconnectController: EFI_DISCONNECT_CONTROLLER,
+    connect_controller: EfiConnectController,
+    disconnect_controller: EfiDisconnectController,
 
-    OpenProtocol: EFI_OPEN_PROTOCOL,
-    CloseProtocol: EFI_CLOSE_PROTOCOL,
-    OpenProtocolInformation: EFI_OPEN_PROTOCOL_INFORMATION,
+    open_protocol: EfiOpenProtocol,
+    close_protocol: EfiCloseProtocol,
+    open_protocol_information: EfiOpenProtocolInformation,
 
-    ProtocolsPerHandle: EFI_PROTOCOLS_PER_HANDLE,
-    LocateHandleBuffer: EFI_LOCATE_HANDLE_BUFFER,
-    LocateProtocol: EFI_LOCATE_PROTOCOL,
-    InstallMultipleProtocolInterfaces: EFI_INSTALL_MULTIPLE_PROTOCOL_INTERFACES,
-    UninstallMultipleProtocolInterfaces: EFI_UNINSTALL_MULTIPLE_PROTOCOL_INTERFACES,
+    protocols_per_handle: EfiProtocolsPerHandle,
+    locate_handle_buffer: EfiLocateHandleBuffer,
+    locate_protocol: EfiLocateProtocol,
+    install_multiple_protocol_interfaces: EfiInstallMultipleProtocolInterfaces,
+    uninstall_multiple_protocol_interfaces: EfiUninstallMultipleProtocolInterfaces,
 
-    CalculateCrc32: EFI_CALCULATE_CRC32,
+    calculate_crc32: EfiCalculateCrc32,
 
-    CopyMem: EFI_COPY_MEM,
-    SetMem: EFI_SET_MEM,
-    CreateEventEx: EFI_CREATE_EVENT_EX,
+    copy_mem: EfiCopyMem,
+    set_mem: EfiSetMem,
+    create_event_ex: EfiCreateEventEx,
 }
 
-impl EFI_BOOT_SERVICES {
+impl EfiBootServices {
     pub fn allocate_pages(
         &self,
-        r#type: EFI_ALLOCATE_TYPE,
-        memory_type: EFI_MEMORY_TYPE,
+        r#type: EfiAllocateType,
+        memory_type: EfiMemoryType,
         pages: UnsignedIntNative,
-        memory_in_out: &mut EFI_PHYSICAL_ADDRESS,
+        memory_in_out: &mut EfiPhysicalAddress,
     ) -> EfiStatus {
-        let status = unsafe { (self.AllocatePages)(r#type, memory_type, pages, memory_in_out) };
+        let status = unsafe { (self.allocate_pages)(r#type, memory_type, pages, memory_in_out) };
         status
     }
 
@@ -305,9 +309,9 @@ impl EFI_BOOT_SERVICES {
         let mut descriptor_size_out = 0;
         let mut descriptor_version_out = 0;
         let status = unsafe {
-            (self.GetMemoryMap)(
+            (self.get_memory_map)(
                 memory_map_size_in_out,
-                memory_map_out.as_ptr() as *mut EFI_MEMORY_DESCRIPTOR,
+                memory_map_out.as_ptr() as *mut EfiMemoryDescriptor,
                 &mut map_key_out,
                 &mut descriptor_size_out,
                 &mut descriptor_version_out,
@@ -320,31 +324,33 @@ impl EFI_BOOT_SERVICES {
     }
     pub fn allocate_pool(
         &self,
-        pool_type: EFI_MEMORY_TYPE,
+        pool_type: EfiMemoryType,
         size: UnsignedIntNative,
     ) -> Result<&mut [UnsignedInt8], EfiStatus> {
         let mut buffer = null();
-        let status = unsafe { (self.AllocatePool)(pool_type, size, &mut buffer) };
+        let status = unsafe { (self.allocate_pool)(pool_type, size, &mut buffer) };
         match status {
-            EFI_SUCCESS => Ok(unsafe { slice::from_raw_parts_mut(buffer as *mut UnsignedInt8, size) }),
+            EFI_SUCCESS => {
+                Ok(unsafe { slice::from_raw_parts_mut(buffer as *mut UnsignedInt8, size) })
+            }
             v => Err(v),
         }
     }
     pub fn free_pool(&self, buffer: &[UnsignedInt8]) -> EfiStatus {
-        let status = unsafe { (self.FreePool)(buffer.as_ptr() as *const Void) };
+        let status = unsafe { (self.free_pool)(buffer.as_ptr() as *const Void) };
         status
     }
 
     pub fn locate_handle_buffer(
         &self,
-        search_type: EFI_LOCATE_SEARCH_TYPE,
-        protocol_optional: Option<&EFI_GUID>,
+        search_type: EfiLocateSearchType,
+        protocol_optional: Option<&EfiGuid>,
         search_key_optional: Option<&Void>,
     ) -> Result<(UnsignedIntNative, &[EfiHandle]), EfiStatus> {
         let mut no_handles = 0;
         let mut buffer = null();
         let status = unsafe {
-            (self.LocateHandleBuffer)(
+            (self.locate_handle_buffer)(
                 search_type,
                 match protocol_optional {
                     Some(protocol) => protocol,
@@ -366,15 +372,19 @@ impl EFI_BOOT_SERVICES {
         }
     }
 
-    pub fn exit_boot_services(&self, image_handle: EfiHandle, map_key: UnsignedIntNative) -> EfiStatus {
-        let status = unsafe { (self.ExitBootServices)(image_handle, map_key) };
+    pub fn exit_boot_services(
+        &self,
+        image_handle: EfiHandle,
+        map_key: UnsignedIntNative,
+    ) -> EfiStatus {
+        let status = unsafe { (self.exit_boot_services)(image_handle, map_key) };
         status
     }
 
     pub fn open_protocol<T>(
         &self,
         handle: EfiHandle,
-        protocol: &EFI_GUID,
+        protocol: &EfiGuid,
         interface_optional: Option<()>,
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
@@ -384,7 +394,7 @@ impl EFI_BOOT_SERVICES {
             Some(()) => {
                 let mut interface_out = null();
                 let status = unsafe {
-                    (self.OpenProtocol)(
+                    (self.open_protocol)(
                         handle,
                         protocol,
                         &mut interface_out,
@@ -402,7 +412,7 @@ impl EFI_BOOT_SERVICES {
             }
             None => {
                 let status = unsafe {
-                    (self.OpenProtocol)(
+                    (self.open_protocol)(
                         handle,
                         protocol,
                         null_mut(),

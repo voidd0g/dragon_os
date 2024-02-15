@@ -3,99 +3,101 @@ use core::ptr::null;
 use crate::uefi::{
     constant::efi_status::EFI_SUCCESS,
     data_type::{
-        basic_type::{Char16, EFI_GUID, EfiStatus, UnsignedInt64, UnsignedInt8, UnsignedIntNative, Void},
-        efi_file_io_token::EFI_FILE_IO_TOKEN,
+        basic_type::{
+            Char16, EfiGuid, EfiStatus, UnsignedInt64, UnsignedInt8, UnsignedIntNative, Void,
+        },
+        efi_file_io_token::EfiFileIoToken,
     },
 };
 
-type EFI_FILE_OPEN = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    NewHandleOut: *mut *const EFI_FILE_PROTOCOL,
-    FileName: *const Char16,
-    OpenMode: UnsignedInt64,
-    Attributes: UnsignedInt64,
+type EfiFileOpen = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    new_handle_out: *mut *const EfiFileProtocol,
+    file_name: *const Char16,
+    open_mode: UnsignedInt64,
+    attributes: UnsignedInt64,
 ) -> EfiStatus;
-type EFI_FILE_CLOSE = unsafe extern "efiapi" fn(This: *const EFI_FILE_PROTOCOL) -> EfiStatus;
-type EFI_FILE_DELETE = unsafe extern "efiapi" fn(This: *const EFI_FILE_PROTOCOL) -> EfiStatus;
-type EFI_FILE_READ = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    BufferSizeInOut: *mut UnsignedIntNative,
-    BufferOut: *mut Void,
+type EfiFileClose = unsafe extern "efiapi" fn(this: *const EfiFileProtocol) -> EfiStatus;
+type EfiFileDelete = unsafe extern "efiapi" fn(this: *const EfiFileProtocol) -> EfiStatus;
+type EfiFileRead = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    buffer_size_in_out: *mut UnsignedIntNative,
+    buffer_out: *mut Void,
 ) -> EfiStatus;
-type EFI_FILE_WRITE = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    BufferSizeInOut: *mut UnsignedIntNative,
-    Buffer: *const Void,
+type EfiFileWrite = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    buffer_size_in_out: *mut UnsignedIntNative,
+    buffer: *const Void,
 ) -> EfiStatus;
-type EFI_FILE_GET_POSITION = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    PositionOut: *mut UnsignedInt64,
+type EfiFileGetPosition = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    position_out: *mut UnsignedInt64,
 ) -> EfiStatus;
-type EFI_FILE_SET_POSITION =
-    unsafe extern "efiapi" fn(This: *const EFI_FILE_PROTOCOL, Position: UnsignedInt64) -> EfiStatus;
-type EFI_FILE_GET_INFO = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    InformationType: *const EFI_GUID,
-    BufferSizeInOut: *mut UnsignedIntNative,
-    BufferOut: *mut Void,
+type EfiFileSetPosition =
+    unsafe extern "efiapi" fn(this: *const EfiFileProtocol, position: UnsignedInt64) -> EfiStatus;
+type EfiFileGetInfo = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    information_type: *const EfiGuid,
+    buffer_size_in_out: *mut UnsignedIntNative,
+    buffer_out: *mut Void,
 ) -> EfiStatus;
-type EFI_FILE_SET_INFO = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    InformationType: *const EFI_GUID,
-    BufferSize: UnsignedIntNative,
-    Buffer: *const Void,
+type EfiFileSetInfo = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    information_type: *const EfiGuid,
+    buffer_size: UnsignedIntNative,
+    buffer: *const Void,
 ) -> EfiStatus;
-type EFI_FILE_FLUSH = unsafe extern "efiapi" fn(This: *const EFI_FILE_PROTOCOL) -> EfiStatus;
-type EFI_FILE_OPEN_EX = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    NewHandleOut: *mut *const EFI_FILE_PROTOCOL,
-    FileName: *const Char16,
-    OpenMode: UnsignedInt64,
-    Attributes: UnsignedInt64,
-    TokenInOut: *mut EFI_FILE_IO_TOKEN,
+type EfiFileFlush = unsafe extern "efiapi" fn(this: *const EfiFileProtocol) -> EfiStatus;
+type EfiFileOpenEx = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    new_handle_out: *mut *const EfiFileProtocol,
+    file_name: *const Char16,
+    open_mode: UnsignedInt64,
+    attributes: UnsignedInt64,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
-type EFI_FILE_READ_EX = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    TokenInOut: *mut EFI_FILE_IO_TOKEN,
+type EfiFileReadEx = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
-type EFI_FILE_WRITE_EX = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    TokenInOut: *mut EFI_FILE_IO_TOKEN,
+type EfiFileWriteEx = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
-type EFI_FILE_FLUSH_EX = unsafe extern "efiapi" fn(
-    This: *const EFI_FILE_PROTOCOL,
-    TokenInOut: *mut EFI_FILE_IO_TOKEN,
+type EfiFileFlushEx = unsafe extern "efiapi" fn(
+    this: *const EfiFileProtocol,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
 
 #[repr(C)]
-pub struct EFI_FILE_PROTOCOL {
-    Revision: UnsignedInt64,
-    Open: EFI_FILE_OPEN,
-    Close: EFI_FILE_CLOSE,
-    Delete: EFI_FILE_DELETE,
-    Read: EFI_FILE_READ,
-    Write: EFI_FILE_WRITE,
-    GetPosition: EFI_FILE_GET_POSITION,
-    SetPosition: EFI_FILE_SET_POSITION,
-    GetInfo: EFI_FILE_GET_INFO,
-    SetInfo: EFI_FILE_SET_INFO,
-    Flush: EFI_FILE_FLUSH,
-    OpenEx: EFI_FILE_OPEN_EX,
-    ReadEx: EFI_FILE_READ_EX,
-    WriteEx: EFI_FILE_WRITE_EX,
-    FlushEx: EFI_FILE_FLUSH_EX,
+pub struct EfiFileProtocol {
+    revision: UnsignedInt64,
+    open: EfiFileOpen,
+    close: EfiFileClose,
+    delete: EfiFileDelete,
+    read: EfiFileRead,
+    write: EfiFileWrite,
+    get_position: EfiFileGetPosition,
+    set_position: EfiFileSetPosition,
+    get_info: EfiFileGetInfo,
+    set_info: EfiFileSetInfo,
+    flush: EfiFileFlush,
+    open_ex: EfiFileOpenEx,
+    read_ex: EfiFileReadEx,
+    write_ex: EfiFileWriteEx,
+    flush_ex: EfiFileFlushEx,
 }
 
-impl EFI_FILE_PROTOCOL {
+impl EfiFileProtocol {
     pub fn open(
         &self,
         file_name: &[Char16],
         open_mode: UnsignedInt64,
         attributes: UnsignedInt64,
-    ) -> Result<&EFI_FILE_PROTOCOL, EfiStatus> {
+    ) -> Result<&EfiFileProtocol, EfiStatus> {
         let mut new_handle_out = null();
         let status = unsafe {
-            (self.Open)(
+            (self.open)(
                 self,
                 &mut new_handle_out,
                 file_name.as_ptr(),
@@ -109,13 +111,17 @@ impl EFI_FILE_PROTOCOL {
         }
     }
     pub fn close(&self) -> EfiStatus {
-        let status = unsafe { (self.Close)(self) };
+        let status = unsafe { (self.close)(self) };
         status
     }
 
-    pub fn read(&self, buffer_size_in_out: &mut UnsignedIntNative, buffer_out: &mut [UnsignedInt8]) -> EfiStatus {
+    pub fn read(
+        &self,
+        buffer_size_in_out: &mut UnsignedIntNative,
+        buffer_out: &mut [UnsignedInt8],
+    ) -> EfiStatus {
         let status = unsafe {
-            (self.Read)(
+            (self.read)(
                 self,
                 buffer_size_in_out,
                 buffer_out.as_mut_ptr() as *mut Void,
@@ -123,20 +129,24 @@ impl EFI_FILE_PROTOCOL {
         };
         status
     }
-    pub fn write(&self, buffer_size_in_out: &mut UnsignedIntNative, buffer: &[UnsignedInt8]) -> EfiStatus {
+    pub fn write(
+        &self,
+        buffer_size_in_out: &mut UnsignedIntNative,
+        buffer: &[UnsignedInt8],
+    ) -> EfiStatus {
         let status =
-            unsafe { (self.Write)(self, buffer_size_in_out, buffer.as_ptr() as *const Void) };
+            unsafe { (self.write)(self, buffer_size_in_out, buffer.as_ptr() as *const Void) };
         status
     }
 
     pub fn get_info(
         &self,
-        information_type: &EFI_GUID,
+        information_type: &EfiGuid,
         buffer_size_in_out: &mut UnsignedIntNative,
         buffer_out: &mut [UnsignedInt8],
     ) -> EfiStatus {
         let status = unsafe {
-            (self.GetInfo)(
+            (self.get_info)(
                 self,
                 information_type,
                 buffer_size_in_out,

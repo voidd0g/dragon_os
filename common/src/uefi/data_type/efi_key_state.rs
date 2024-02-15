@@ -1,7 +1,7 @@
-use crate::uefi::data_type::basic_type::{EFI_KEY_TOGGLE_STATE, UnsignedInt32};
+use super::basic_type::{EfiKeyToggleState, UnsignedInt32};
 
 #[repr(C)]
-pub struct EFI_KEY_STATE {
-    KeyShiftState: UnsignedInt32,
-    KeyToggleState: EFI_KEY_TOGGLE_STATE,
+pub struct EfiKeyState {
+    key_shift_state: UnsignedInt32,
+    key_toggle_state: EfiKeyToggleState,
 }

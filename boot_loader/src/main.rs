@@ -13,8 +13,8 @@ use common::{
         constant::{
             efi_allocate_type::AllocateAddress,
             efi_file_mode::{EFI_FILE_MODE_CREATE, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE},
-            efi_locate_search_type::ByProtocol,
-            efi_memory_type::EfiLoaderData,
+            efi_locate_search_type::BY_PROTOCOL,
+            efi_memory_type::EFI_LOADER_DATA,
             efi_open_protocol::EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
             efi_status::{EFI_ABORTED, EFI_BUFFER_TOO_SMALL, EFI_SUCCESS},
             guid::{
@@ -24,20 +24,18 @@ use common::{
         },
         data_type::{
             basic_type::{
-                CHAR16, EFI_HANDLE, EFI_PHYSICAL_ADDRESS, EFI_STATUS, UINT32, UINT64, UINT8, UINTN,
-                VOID,
+                Char16, EfiHandle, EfiStatus, Void, EFI_PHYSICAL_ADDRESS, UnsignedInt32, UnsignedInt64, UnsignedInt8, UnsignedIntNative
             },
-            efi_file_info::EFI_FILE_INFO,
+            efi_file_info::EfiFileInfo,
             efi_memory_descriptor::EFI_MEMORY_DESCRIPTOR,
         },
         protocol::{
             efi_file_protocol::EFI_FILE_PROTOCOL,
             efi_graphics_output_protocol::EFI_GRAPHICS_OUTPUT_PROTOCOL,
-            efi_loaded_image_protocol::EFI_LOADED_IMAGE_PROTOCOL,
-            efi_simple_file_system_protocol::EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,
-            efi_simple_text_output_protocol::EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
+            efi_loaded_image_protocol::EfiLoadedImageProtocol,
+            efi_simple_file_system_protocol::EFI_SIMPLE_FILE_SYSTEM_PROTOCOL, efi_simple_text_output_protocol::EfiSimpleTextOutputProtocol,
         },
-        table::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EFI_SYSTEM_TABLE},
+        table::{efi_boot_services::EFI_BOOT_SERVICES, efi_system_table::EfiSystemTable},
     },
 };
 use core::{
@@ -48,9 +46,9 @@ use utf16_literal::utf16;
 
 #[no_mangle]
 pub extern "efiapi" fn efi_main(
-    image_handle: EFI_HANDLE,
-    system_table: *const EFI_SYSTEM_TABLE,
-) -> EFI_STATUS {
+    image_handle: EfiHandle,
+    system_table: *const EfiSystemTable,
+) -> EfiStatus {
     let system_table = unsafe { system_table.as_ref() }.unwrap();
     let cout = system_table.con_out();
     let boot_services = system_table.boot_services();
@@ -110,15 +108,15 @@ pub extern "efiapi" fn efi_main(
     };
 
     cout.output_string(utf16!("Open kernel file\r\n\0"));
-    const KERNEL_FILE_NAME: &[CHAR16] = utf16!(".\\KERNEL.ELF\0");
+    const KERNEL_FILE_NAME: &[Char16] = utf16!(".\\KERNEL.ELF\0");
     let kernel_file = match root_dir.open(KERNEL_FILE_NAME, EFI_FILE_MODE_READ, 0) {
         Ok(kernel_file) => kernel_file,
         Err(v) => stop_with_error(v, boot_services, cout),
     };
 
     cout.output_string(utf16!("Get kernel file info\r\n\0"));
-    const FILE_INFO_BUFFER_SIZE: UINTN =
-        size_of::<EFI_FILE_INFO>() + size_of::<CHAR16>() * KERNEL_FILE_NAME.len();
+    const FILE_INFO_BUFFER_SIZE: UnsignedIntNative =
+        size_of::<EfiFileInfo>() + size_of::<Char16>() * KERNEL_FILE_NAME.len();
     let mut kernel_file_info_buffer_size = FILE_INFO_BUFFER_SIZE;
     let mut kernel_file_info_buffer = [0; FILE_INFO_BUFFER_SIZE];
     let status = kernel_file.get_info(
@@ -131,17 +129,17 @@ pub extern "efiapi" fn efi_main(
         v => stop_with_error(v, boot_services, cout),
     }
     let kernel_file_info =
-        unsafe { (kernel_file_info_buffer.as_ptr() as *const EFI_FILE_INFO).as_ref() }.unwrap();
+        unsafe { (kernel_file_info_buffer.as_ptr() as *const EfiFileInfo).as_ref() }.unwrap();
     let kernel_file_size = kernel_file_info.file_size();
 
     cout.output_string(utf16!("Allocate pool for kernel file content\r\n\0"));
-    let kernel_buf = match boot_services.allocate_pool(EfiLoaderData, kernel_file_size as UINTN) {
+    let kernel_buf = match boot_services.allocate_pool(EFI_LOADER_DATA, kernel_file_size as UnsignedIntNative) {
         Ok(res) => res,
         Err(v) => stop_with_error(v, boot_services, cout),
     };
 
     cout.output_string(utf16!("Read kernel file content\r\n\0"));
-    let mut kernel_file_size_in_out = kernel_file_size as UINTN;
+    let mut kernel_file_size_in_out = kernel_file_size as UnsignedIntNative;
     let status = kernel_file.read(&mut kernel_file_size_in_out, kernel_buf);
     match status {
         EFI_SUCCESS => (),
@@ -152,12 +150,12 @@ pub extern "efiapi" fn efi_main(
     let (kernel_beg, kernel_end) = calc_load_address_range(kernel_elf_header);
 
     cout.output_string(utf16!("Allocate pages for loading kernel\r\n\0"));
-    let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as UINTN;
+    let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as UnsignedIntNative;
     let mut kernel_base_addr = kernel_beg;
-    const PAGE_SIZE: UINT64 = 0x1000;
+    const PAGE_SIZE: UnsignedInt64 = 0x1000;
     let status = boot_services.allocate_pages(
         AllocateAddress,
-        EfiLoaderData,
+        EFI_LOADER_DATA,
         page_num,
         &mut kernel_base_addr,
     );
@@ -201,16 +199,16 @@ pub extern "efiapi" fn efi_main(
     let arg = Argument::new(&frame_buffer_config);
 
     (unsafe {
-        transmute::<*const VOID, extern "sysv64" fn(*const Argument) -> !>(
-            (*((kernel_base_addr + 24) as *const u64)) as *const VOID,
+        transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(
+            (*((kernel_base_addr + 24) as *const u64)) as *const Void,
         )
     })(&arg)
 }
 
 fn stop_with_error(
-    v: EFI_STATUS,
+    v: EfiStatus,
     boot_services: &EFI_BOOT_SERVICES,
-    cout: &EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL,
+    cout: &EfiSimpleTextOutputProtocol,
 ) -> ! {
     let str = (v, 16u8).to_string(boot_services).unwrap();
     cout.output_string(str);
@@ -241,8 +239,8 @@ fn copy_load_segments(elf_header: &Elf64Header) -> () {
             let virtual_address = program_header.virtual_address();
             
             unsafe {
-                copy(((elf_header as *const Elf64Header) as EFI_PHYSICAL_ADDRESS + file_offset) as *const UINT8, virtual_address as *mut UINT8, file_size as UINTN);
-                write_bytes((virtual_address as EFI_PHYSICAL_ADDRESS + file_size) as *mut UINT8, 0, remaining_size as UINTN)
+                copy(((elf_header as *const Elf64Header) as EFI_PHYSICAL_ADDRESS + file_offset) as *const UnsignedInt8, virtual_address as *mut UnsignedInt8, file_size as UnsignedIntNative);
+                write_bytes((virtual_address as EFI_PHYSICAL_ADDRESS + file_size) as *mut UnsignedInt8, 0, remaining_size as UnsignedIntNative)
             }
         }
 
@@ -278,15 +276,15 @@ fn calc_load_address_range(
 }
 
 fn concat_string<'a>(
-    strs: &[&[CHAR16]],
+    strs: &[&[Char16]],
     boot_services: &'a EFI_BOOT_SERVICES,
-) -> Result<&'a [CHAR16], EFI_STATUS> {
+) -> Result<&'a [Char16], EfiStatus> {
     let len = strs.iter().map(|str| str.len()).sum::<usize>() - strs.len() + 1;
-    let buf = match boot_services.allocate_pool(EfiLoaderData, len * 2) {
+    let buf = match boot_services.allocate_pool(EFI_LOADER_DATA, len * 2) {
         Ok(buf) => buf,
         Err(v) => return Err(v),
     };
-    let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut CHAR16, len) };
+    let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut Char16, len) };
     let mut iter = buf.iter_mut();
     for str in strs {
         let mut str_iter = str.iter();
@@ -298,18 +296,18 @@ fn concat_string<'a>(
     Ok(buf)
 }
 
-fn free_string(str: &[CHAR16], boot_services: &EFI_BOOT_SERVICES) -> EFI_STATUS {
+fn free_string(str: &[Char16], boot_services: &EFI_BOOT_SERVICES) -> EfiStatus {
     let status = boot_services
-        .free_pool(unsafe { slice::from_raw_parts(str.as_ptr() as *const UINT8, str.len() * 2) });
+        .free_pool(unsafe { slice::from_raw_parts(str.as_ptr() as *const UnsignedInt8, str.len() * 2) });
     status
 }
 
 struct MemoryMap<'buffer> {
-    memory_map_buffer: &'buffer [UINT8],
-    map_size: UINTN,
-    map_key: UINTN,
-    descriptor_size: UINTN,
-    descriptor_version: UINT32,
+    memory_map_buffer: &'buffer [UnsignedInt8],
+    map_size: UnsignedIntNative,
+    map_key: UnsignedIntNative,
+    descriptor_size: UnsignedIntNative,
+    descriptor_version: UnsignedInt32,
 }
 
 #[panic_handler]
@@ -322,11 +320,11 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
 }
 
 fn open_gop(
-    image_handle: EFI_HANDLE,
+    image_handle: EfiHandle,
     boot_services: &EFI_BOOT_SERVICES,
-) -> Result<&EFI_GRAPHICS_OUTPUT_PROTOCOL, EFI_STATUS> {
+) -> Result<&EFI_GRAPHICS_OUTPUT_PROTOCOL, EfiStatus> {
     let (num_gop_handles, gop_handles) = match boot_services.locate_handle_buffer(
-        ByProtocol,
+        BY_PROTOCOL,
         Some(&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID),
         None,
     ) {
@@ -352,7 +350,7 @@ fn open_gop(
     let status = boot_services.free_pool(unsafe {
         slice::from_raw_parts(
             gop_handles.as_ptr() as *const u8,
-            gop_handles.len() * size_of::<EFI_HANDLE>(),
+            gop_handles.len() * size_of::<EfiHandle>(),
         )
     });
     match status {
@@ -363,7 +361,7 @@ fn open_gop(
     Ok(gop)
 }
 
-fn get_memory_map<'a>(boot_services: &'a EFI_BOOT_SERVICES) -> Result<MemoryMap<'a>, EFI_STATUS> {
+fn get_memory_map<'a>(boot_services: &'a EFI_BOOT_SERVICES) -> Result<MemoryMap<'a>, EfiStatus> {
     let mut empty_buf = [];
     let mut memmap_size_needed = 0;
     let _ = match boot_services.get_memory_map(&mut memmap_size_needed, &mut empty_buf) {
@@ -377,7 +375,7 @@ fn get_memory_map<'a>(boot_services: &'a EFI_BOOT_SERVICES) -> Result<MemoryMap<
     memmap_size_needed /= 8;
     memmap_size_needed *= 8;
 
-    let memmap_buf = match boot_services.allocate_pool(EfiLoaderData, memmap_size_needed) {
+    let memmap_buf = match boot_services.allocate_pool(EFI_LOADER_DATA, memmap_size_needed) {
         Ok(res) => res,
         Err(v) => return Err(v),
     };
@@ -397,10 +395,10 @@ fn get_memory_map<'a>(boot_services: &'a EFI_BOOT_SERVICES) -> Result<MemoryMap<
 }
 
 fn open_root_dir(
-    image_handle: EFI_HANDLE,
+    image_handle: EfiHandle,
     boot_services: &EFI_BOOT_SERVICES,
-) -> Result<&EFI_FILE_PROTOCOL, EFI_STATUS> {
-    let loaded_image = match boot_services.open_protocol::<EFI_LOADED_IMAGE_PROTOCOL>(
+) -> Result<&EFI_FILE_PROTOCOL, EfiStatus> {
+    let loaded_image = match boot_services.open_protocol::<EfiLoadedImageProtocol>(
         image_handle,
         &EFI_LOADED_IMAGE_PROTOCOL_GUID,
         Some(()),
@@ -444,10 +442,10 @@ fn save_memory_map(
     memmap: &MemoryMap,
     boot_services: &EFI_BOOT_SERVICES,
     file: &EFI_FILE_PROTOCOL,
-) -> EFI_STATUS {
+) -> EfiStatus {
     let header = utf16!("Index, Type, PhysicalStart, NumberOfPages, Attribute\n");
     let header_buffer =
-        unsafe { slice::from_raw_parts(header.as_ptr() as *const UINT8, header.len() * 2) };
+        unsafe { slice::from_raw_parts(header.as_ptr() as *const UnsignedInt8, header.len() * 2) };
     let mut header_buffer_size = header_buffer.len();
     let status = file.write(&mut header_buffer_size, header_buffer);
     match status {
@@ -538,7 +536,7 @@ fn save_memory_map(
         free_string(i_string, boot_services);
         let content_buffer = unsafe {
             slice::from_raw_parts(
-                str[..str.len() - 1].as_ptr() as *const UINT8,
+                str[..str.len() - 1].as_ptr() as *const UnsignedInt8,
                 (str.len() - 1) * 2,
             )
         };

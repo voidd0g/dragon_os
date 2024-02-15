@@ -1,5 +1,5 @@
-use crate::uefi::data_type::basic_type::EFI_LOCATE_SEARCH_TYPE;
+use crate::uefi::data_type::basic_type::EfiLocateSearchType;
 
-pub const ALL_HANDLES: EFI_LOCATE_SEARCH_TYPE = 0;
-pub const BY_REGISTER_NOTIFY: EFI_LOCATE_SEARCH_TYPE = 1;
-pub const BY_PROTOCOL: EFI_LOCATE_SEARCH_TYPE = 2;
+pub const ALL_HANDLES: EfiLocateSearchType = 0;
+pub const BY_REGISTER_NOTIFY: EfiLocateSearchType = 1;
+pub const BY_PROTOCOL: EfiLocateSearchType = 2;
