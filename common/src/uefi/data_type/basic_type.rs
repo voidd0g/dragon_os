@@ -9,6 +9,7 @@ pub type Int8 = i8;
 pub type Int16 = i16;
 pub type Int32 = i32;
 pub type UnsignedInt8 = u8;
+pub type Char8 = u8;
 pub type Char16 = u16;
 pub type UnsignedInt64 = u64;
 pub type UnsignedInt32 = u32;

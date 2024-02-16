@@ -1,17 +1,16 @@
 #![no_std]
 #![no_main]
 
-use core::{arch::asm, fmt::Debug, panic::PanicInfo};
+mod font;
+mod pixel_writer;
+mod util;
 
-use common::{
-    argument::{Argument, FrameBufferConfig},
-    uefi::{
-        constant::efi_graphics_pixel_format::{
-            PIXEL_BLUE_GREEN_RED_RESERVED8_BIT_PER_COLOR,
-            PIXEL_RED_GREEN_BLUE_RESERVED8_BIT_PER_COLOR,
-        },
-        data_type::basic_type::{UnsignedInt8, UnsignedIntNative},
-    },
+use core::{arch::asm, panic::PanicInfo};
+
+use common::{argument::Argument, uefi::data_type::basic_type::UnsignedInt8};
+
+use crate::{
+    font::font_writer::FontWriter, pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, put_pixels}, util::vector2::Vector2
 };
 
 #[panic_handler]
@@ -33,35 +32,49 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
     }
 
     let frame_buffer_config = arg.frame_buffer_config();
-    for y in 0..frame_buffer_config.vertical_resolution() {
-        for x in 0..frame_buffer_config.horizontal_resolution() {
-            if 100 <= x && x < 300 && 100 <= y && y < 500 {
-                let _ = end_with_err! {
-                    put_pixel(
-                        frame_buffer_config,
-                        PixelColor {
-                            red: 255,
-                            green: 255,
-                            blue: 0,
-                        },
-                        Vector2(x as UnsignedIntNative, y as UnsignedIntNative),
-                    )
-                };
-            } else {
-                let _ = end_with_err! {
-                    put_pixel(
-                        frame_buffer_config,
-                        PixelColor {
-                            red: 0,
-                            green: 255,
-                            blue: 255,
-                        },
-                        Vector2(x as UnsignedIntNative, y as UnsignedIntNative),
-                    )
-                };
-            }
-        }
-    }
+
+    let _ = end_with_err! {
+        put_pixels(
+            frame_buffer_config.pixels_per_scan_line(),
+            frame_buffer_config.pixel_format(),
+            frame_buffer_config.frame_buffer(),
+            DrawRect::new(PixelColor::new(0, 255, 128), Vector2::new(0, 0), Vector2::new(frame_buffer_config.horizontal_resolution(), frame_buffer_config.vertical_resolution())),
+        )
+    };
+
+    let _ = end_with_err! {
+        put_pixels(
+            frame_buffer_config.pixels_per_scan_line(),
+            frame_buffer_config.pixel_format(),
+            frame_buffer_config.frame_buffer(),
+            DrawRect::new(PixelColor::new(0, 128, 255), Vector2::new(100, 100), Vector2::new(300, 500) ),
+        )
+    };
+
+    let _ = end_with_err! {
+        put_pixels(
+            frame_buffer_config.pixels_per_scan_line(),
+            frame_buffer_config.pixel_format(),
+            frame_buffer_config.frame_buffer(),
+            FontWriter::new(PixelColor::new(0, 0, 0), Vector2::new(200, 200), 'A' as UnsignedInt8),
+        )
+    };
+    let _ = end_with_err! {
+        put_pixels(
+            frame_buffer_config.pixels_per_scan_line(),
+            frame_buffer_config.pixel_format(),
+            frame_buffer_config.frame_buffer(),
+            FontWriter::new(PixelColor::new(128, 0, 0), Vector2::new(208, 200), 'B' as UnsignedInt8),
+        )
+    };
+    let _ = end_with_err! {
+        put_pixels(
+            frame_buffer_config.pixels_per_scan_line(),
+            frame_buffer_config.pixel_format(),
+            frame_buffer_config.frame_buffer(),
+            FontWriter::new(PixelColor::new(255, 0, 0), Vector2::new(216, 200), 'C' as UnsignedInt8),
+        )
+    };
 
     end()
 }
@@ -73,41 +86,3 @@ fn end() -> ! {
         }
     }
 }
-
-fn put_pixel(
-    frame_buffer_config: &FrameBufferConfig,
-    color: PixelColor,
-    pos: Vector2<UnsignedIntNative>,
-) -> Result<(), ()> {
-    match frame_buffer_config.pixel_format() {
-        PIXEL_RED_GREEN_BLUE_RESERVED8_BIT_PER_COLOR => {
-            let pixel_start_pos =
-                frame_buffer_config.pixels_per_scan_line() as UnsignedIntNative * pos.1 + pos.0;
-            let mut iter = frame_buffer_config.frame_buffer().iter_mut();
-            *iter.nth(pixel_start_pos * 4).unwrap() = color.red;
-            *iter.next().unwrap() = color.green;
-            *iter.next().unwrap() = color.blue;
-            Ok(())
-        }
-        PIXEL_BLUE_GREEN_RED_RESERVED8_BIT_PER_COLOR => {
-            let pixel_start_pos =
-                frame_buffer_config.pixels_per_scan_line() as UnsignedIntNative * pos.1 + pos.0;
-            let mut iter = frame_buffer_config.frame_buffer().iter_mut();
-            *iter.nth(pixel_start_pos * 4).unwrap() = color.blue;
-            *iter.next().unwrap() = color.green;
-            *iter.next().unwrap() = color.red;
-            Ok(())
-        }
-        _ => Err(()),
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct PixelColor {
-    pub red: UnsignedInt8,
-    pub green: UnsignedInt8,
-    pub blue: UnsignedInt8,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Vector2<T: Clone + Copy + Debug>(T, T);
