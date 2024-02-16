@@ -3,6 +3,7 @@
 
 mod font;
 mod pixel_writer;
+mod pointer;
 mod util;
 
 use core::{arch::asm, panic::PanicInfo};
@@ -10,7 +11,7 @@ use core::{arch::asm, panic::PanicInfo};
 use common::{argument::Argument, uefi::data_type::basic_type::UnsignedInt8};
 
 use crate::{
-    font::font_writer::FontWriter, pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, put_pixels}, util::vector2::Vector2
+    font::font_writer::FontWriter, pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, put_pixels}, pointer::PointerWriter, util::vector2::Vector2
 };
 
 #[panic_handler]
@@ -73,6 +74,15 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
             frame_buffer_config.pixel_format(),
             frame_buffer_config.frame_buffer(),
             FontWriter::new(PixelColor::new(255, 0, 0), Vector2::new(216, 200), 'C' as UnsignedInt8),
+        )
+    };
+
+    let _ = end_with_err! {
+        put_pixels(
+            frame_buffer_config.pixels_per_scan_line(),
+            frame_buffer_config.pixel_format(),
+            frame_buffer_config.frame_buffer(),
+            PointerWriter::new(Vector2::new(300, 300)),
         )
     };
 

@@ -30,36 +30,40 @@ pub fn put_pixel(
         PIXEL_RED_GREEN_BLUE_RESERVED8_BIT_PER_COLOR => {
             let pixel_start_pos = pixels_per_scan_line as UnsignedIntNative * pos.y() + pos.x();
             let mut iter = frame_buffer.iter_mut();
-            *(match iter.nth(pixel_start_pos * 4) {
-                Some(res) => res,
-                None => return Err(()),
-            }) = color.red();
-            *(match iter.next() {
-                Some(res) => res,
-                None => return Err(()),
-            }) = color.green();
-            *(match iter.next() {
-                Some(res) => res,
-                None => return Err(()),
-            }) = color.blue();
-            Ok(())
+            match (
+                iter.nth(pixel_start_pos * 4),
+                iter.next(),
+                iter.next(),
+                iter.next(),
+            ) {
+                (Some(red_target), Some(green_target), Some(blue_target), Some(_)) => {
+                    *red_target = color.red();
+                    *green_target = color.green();
+                    *blue_target = color.blue();
+                    Ok(())
+                }
+                (None, _, _, _) => Ok(()),
+                _ => Err(()),
+            }
         }
         PIXEL_BLUE_GREEN_RED_RESERVED8_BIT_PER_COLOR => {
             let pixel_start_pos = pixels_per_scan_line as UnsignedIntNative * pos.y() + pos.x();
             let mut iter = frame_buffer.iter_mut();
-            *(match iter.nth(pixel_start_pos * 4) {
-                Some(res) => res,
-                None => return Err(()),
-            }) = color.blue();
-            *(match iter.next() {
-                Some(res) => res,
-                None => return Err(()),
-            }) = color.green();
-            *(match iter.next() {
-                Some(res) => res,
-                None => return Err(()),
-            }) = color.red();
-            Ok(())
+            match (
+                iter.nth(pixel_start_pos * 4),
+                iter.next(),
+                iter.next(),
+                iter.next(),
+            ) {
+                (Some(blue_target), Some(green_target), Some(red_target), Some(_)) => {
+                    *red_target = color.red();
+                    *green_target = color.green();
+                    *blue_target = color.blue();
+                    Ok(())
+                }
+                (None, _, _, _) => Ok(()),
+                _ => Err(()),
+            }
         }
         _ => Err(()),
     }
@@ -82,46 +86,34 @@ pub fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(
                         iter.nth(pixel_start_pos * 4 - 1);
                     }
                     'b: loop {
-                        match colors.next() {
-                            Some(Some(color)) => {
-                                *(match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                }) = color.red();
-                                *(match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                }) = color.green();
-                                *(match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                }) = color.blue();
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
+                        match (
+                            colors.next(),
+                            iter.next(),
+                            iter.next(),
+                            iter.next(),
+                            iter.next(),
+                        ) {
+                            (
+                                Some(color_opt),
+                                Some(red_target),
+                                Some(green_target),
+                                Some(blue_target),
+                                Some(_),
+                            ) => {
+                                match color_opt {
+                                    Some(color) => {
+                                        *red_target = color.red();
+                                        *green_target = color.green();
+                                        *blue_target = color.blue();
+                                    }
+                                    None => (),
+                                }
                                 pixel_start_pos += 1;
                             }
-                            Some(None) => {
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                pixel_start_pos += 1;
-                            }
-                            None => break 'b (),
+                            (None, Some(_), Some(_), Some(_), Some(_)) => break 'b (),
+                            (Some(_), None, _, _, _) => break 'b (),
+                            (None, None, _, _, _) => break 'b (),
+                            _ => return Err(()),
                         }
                     }
                 }
@@ -138,46 +130,34 @@ pub fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(
                         iter.nth(pixel_start_pos * 4 - 1);
                     }
                     'b: loop {
-                        match colors.next() {
-                            Some(Some(color)) => {
-                                *(match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                }) = color.blue();
-                                *(match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                }) = color.green();
-                                *(match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                }) = color.red();
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
+                        match (
+                            colors.next(),
+                            iter.next(),
+                            iter.next(),
+                            iter.next(),
+                            iter.next(),
+                        ) {
+                            (
+                                Some(color_opt),
+                                Some(blue_target),
+                                Some(green_target),
+                                Some(red_target),
+                                Some(_),
+                            ) => {
+                                match color_opt {
+                                    Some(color) => {
+                                        *red_target = color.red();
+                                        *green_target = color.green();
+                                        *blue_target = color.blue();
+                                    }
+                                    None => (),
+                                }
                                 pixel_start_pos += 1;
                             }
-                            Some(None) => {
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                let _ = match iter.next() {
-                                    Some(res) => res,
-                                    None => return Err(()),
-                                };
-                                pixel_start_pos += 1;
-                            }
-                            None => break 'b (),
+                            (None, Some(_), Some(_), Some(_), Some(_)) => break 'b (),
+                            (Some(_), None, _, _, _) => break 'b (),
+                            (None, None, _, _, _) => break 'b (),
+                            _ => return Err(()),
                         }
                     }
                 }
