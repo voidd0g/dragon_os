@@ -85,3 +85,6 @@ impl Iterator for FontWriterLine {
 }
 
 impl PixelLineWriter for FontWriterLine {}
+
+pub const FONT_WIDTH: UnsignedInt32 = 8;
+pub const FONT_HEIGHT: UnsignedInt32 = 16;

@@ -2,7 +2,10 @@ use core::slice::Iter;
 
 use common::uefi::data_type::basic_type::{UnsignedInt32, UnsignedInt8, UnsignedIntNative};
 
-use crate::{pixel_writer::{pixel_color::PixelColor, PixelLineWriter, PixelWriter}, util::vector2::Vector2};
+use crate::{
+    pixel_writer::{pixel_color::PixelColor, PixelLineWriter, PixelWriter},
+    util::vector2::Vector2,
+};
 
 const CURSOR_TEXTURE: [[UnsignedInt8; 4]; 24] = [
     [0b01_00_00_00, 0b00_00_00_00, 0b00_00_00_00, 0b00_00_00_00],
@@ -77,10 +80,7 @@ pub struct PointerWriterLine {
 
 impl PointerWriterLine {
     pub const fn new(value: &'static [UnsignedInt8; 4]) -> Self {
-        Self {
-            value,
-            index: 0,
-        }
+        Self { value, index: 0 }
     }
 }
 
@@ -89,12 +89,16 @@ impl Iterator for PointerWriterLine {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < UnsignedInt8::BITS as UnsignedIntNative * self.value.len() {
-            let ret = match (self.value[(self.index / UnsignedInt8::BITS as UnsignedIntNative) % self.value.len()] << self.index) & 0xC0 {
+            let ret = match (self.value
+                [(self.index / UnsignedInt8::BITS as UnsignedIntNative) % self.value.len()]
+                << self.index)
+                & 0xC0
+            {
                 0x80 => Some(PixelColor::new(255, 255, 255)),
                 0x40 => Some(PixelColor::new(0, 0, 0)),
                 _ => None,
             };
-            self.index += 1;
+            self.index += 2;
             Some(ret)
         } else {
             None
