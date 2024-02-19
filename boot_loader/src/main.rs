@@ -1,14 +1,16 @@
 #![no_std]
 #![no_main]
 
-mod con_out;
+mod ascii_to_utf16;
 
+use ascii_to_utf16::ascii_to_utf16;
 use common::{
     argument::{Argument, FrameBufferConfig},
     elf::{
         constant::elf64_program_type::ELF64_PROGRAM_TYPE_LOAD, elf64_header::Elf64Header,
         elf64_program_header::Elf64ProgramHeader,
     },
+    iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
     uefi::{
         constant::{
             efi_allocate_type::AllocateAddress,
@@ -24,8 +26,8 @@ use common::{
         },
         data_type::{
             basic_type::{
-                Char16, EfiHandle, EfiPhysicalAddress, EfiStatus, UnsignedInt32, UnsignedInt64,
-                UnsignedInt8, UnsignedIntNative, Void,
+                Char16, EfiHandle, EfiPhysicalAddress, EfiStatus, UnsignedInt16, UnsignedInt32,
+                UnsignedInt64, UnsignedInt8, UnsignedIntNative, Void,
             },
             efi_file_info::EfiFileInfo,
             efi_memory_descriptor::EfiMemoryDescriptor,
@@ -35,6 +37,7 @@ use common::{
             efi_graphics_output_protocol::EfiGraphicsOutputProtocol,
             efi_loaded_image_protocol::EfiLoadedImageProtocol,
             efi_simple_file_system_protocol::EfiSimpleFileSystemProtocol,
+            efi_simple_text_output_protocol::EfiSimpleTextOutputProtocol,
         },
         table::{efi_boot_services::EfiBootServices, efi_system_table::EfiSystemTable},
     },
@@ -46,12 +49,10 @@ use core::{
     ptr::{copy, write_bytes},
     slice,
 };
-use utf16_literal::utf16;
 
-use crate::con_out::{
-    ConOut, UnsignedIntegerBase, UnsignedIntegerDigitCount, UnsignedIntegerFormatter,
-    ValueWithFormat,
-};
+fn ascii_to_utf16_literal<const N: usize>(ascii: [UnsignedInt8; N]) -> [Char16; N] {
+    ascii.map(|v| v as Char16)
+}
 
 #[no_mangle]
 pub extern "efiapi" fn efi_main(
@@ -70,6 +71,13 @@ pub extern "efiapi" fn efi_main(
             };
         }};
     }
+
+    macro_rules! output_string {
+        ( $($element:expr),* ) => {
+            output_string(&mut [$(&mut $element,)*], cout)
+        };
+    }
+
     macro_rules! log_and_end_with_error {
         ( $e:expr, $con_out:expr ) => {
             {
@@ -77,10 +85,7 @@ pub extern "efiapi" fn efi_main(
                     Ok(res) => res,
                     Err(v) => {
                         end_with_error! {
-                            $con_out.print(ValueWithFormat::String(utf16!("Error: ")), false)
-                        }
-                        end_with_error! {
-                            $con_out.print(ValueWithFormat::UnsignedIntNative(v, UnsignedIntegerFormatter::new(UnsignedIntegerDigitCount::Fixed { count: 8, fill: '0' as Char16 }, UnsignedIntegerBase::Hexadecimal)), true)
+                            output_string!(b"Error: ".to_iter_str(IterStrFormat::none()), v.to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))))
                         }
                         end()
                     },
@@ -93,67 +98,65 @@ pub extern "efiapi" fn efi_main(
         cout.reset(false)
     }
 
-    let con_out = ConOut::new(boot_services, cout);
-
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Hello World\0")), true)
+        output_string!(b"Hello World!".to_iter_str(IterStrFormat::none()))
     }
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Get memory map")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let memmap = log_and_end_with_error! {
         get_memory_map(boot_services), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Open root dir")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let root_dir = log_and_end_with_error! {
         open_root_dir(image_handle, boot_services, &con_out), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Open memmap file")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let memmap_file = log_and_end_with_error! {
         root_dir.open(
-            utf16!("memmap.txt\0"),
+            &ascii_to_utf16_literal(*b"memmap.txt\0"),
             EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
             0,
         ), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Save memmap to file")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let _ = log_and_end_with_error! {
         save_memory_map(&memmap, memmap_file, &con_out), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Close memmap file")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let _ = log_and_end_with_error! {
         memmap_file.close(), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Free memmap buffer")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let _ = log_and_end_with_error! {
         boot_services.free_pool(memmap.memory_map_buffer), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Get gop")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let gop = log_and_end_with_error! {
         open_gop(image_handle, boot_services, &con_out), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Open kernel file")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     const KERNEL_FILE_NAME: &[Char16] = utf16!(".\\KERNEL.ELF\0");
     let kernel_file = log_and_end_with_error! {
@@ -161,7 +164,7 @@ pub extern "efiapi" fn efi_main(
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Get kernel file info")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     const FILE_INFO_BUFFER_SIZE: UnsignedIntNative =
         size_of::<EfiFileInfo>() + size_of::<Char16>() * KERNEL_FILE_NAME.len();
@@ -179,14 +182,14 @@ pub extern "efiapi" fn efi_main(
     let kernel_file_size = kernel_file_info.file_size();
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Allocate pool for kernel file content")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let kernel_buf = log_and_end_with_error! {
         boot_services.allocate_pool(EFI_LOADER_DATA, kernel_file_size as UnsignedIntNative), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Read kernel file content")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let mut kernel_file_size_in_out = kernel_file_size as UnsignedIntNative;
     let _ = log_and_end_with_error! {
@@ -197,7 +200,7 @@ pub extern "efiapi" fn efi_main(
     let (kernel_beg, kernel_end) = calc_load_address_range(kernel_elf_header);
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Allocate pages for loading kernel")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as UnsignedIntNative;
     let mut kernel_base_addr = kernel_beg;
@@ -212,19 +215,19 @@ pub extern "efiapi" fn efi_main(
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Copy content to pages allocated")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     copy_load_segments(kernel_elf_header);
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Free pool for kernel file content")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let _ = log_and_end_with_error! {
         boot_services.free_pool(&kernel_buf), con_out
     };
 
     end_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Get memory map")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     }
     let memmap = log_and_end_with_error! {
         get_memory_map(boot_services), con_out
@@ -248,9 +251,45 @@ pub extern "efiapi" fn efi_main(
 
     (unsafe {
         transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(
-            (*((kernel_base_addr + 24) as *const u64)) as *const Void,
+            (*((kernel_base_addr + 24) as *const UnsignedIntNative)) as *const Void,
         )
     })(&arg)
+}
+
+fn output_string(
+    elements: &mut [&mut dyn Iterator<Item = UnsignedInt8>],
+    cout: &EfiSimpleTextOutputProtocol,
+) -> Result<(), ()> {
+    let mut elements_iter = elements.iter_mut();
+    let mut buf = [0; 256];
+    let mut buf_index;
+    buf.fill(0);
+    buf_index = 0;
+    'a: loop {
+        match elements_iter.next() {
+            Some(element) => 'b: loop {
+                let mut element = ascii_to_utf16(&mut *element);
+                match element.next() {
+                    Some(c) => {
+                        buf[buf_index] = c;
+                        buf_index += 1;
+                        if buf_index == buf.len() {
+                            cout.output_string(&buf);
+                            buf.fill(0);
+                            buf_index = 0;
+                        }
+                    }
+                    None => break 'b (),
+                }
+            },
+            None => {
+                if buf_index != 0 {
+                    cout.output_string(&buf[..buf_index]);
+                }
+                break 'a Ok(());
+            }
+        }
+    }
 }
 
 fn end() -> ! {
@@ -351,7 +390,7 @@ fn open_gop<'a>(
     con_out: &ConOut,
 ) -> Result<&'a EfiGraphicsOutputProtocol, EfiStatus> {
     let _ = return_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Get graphics output protocol handles")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     };
     let (num_gop_handles, gop_handles) = return_with_error! {
         boot_services.locate_handle_buffer(
@@ -362,13 +401,13 @@ fn open_gop<'a>(
     };
     if num_gop_handles < 1 {
         let _ = return_with_error! {
-            con_out.print(ValueWithFormat::String(utf16!("No graphics output protocol handles found")), true)
+            output_string!(b"true".to_iter_str(IterStrFormat::none()))
         };
         return Err(EFI_ABORTED);
     }
 
     let _ = return_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Get graphics output protocol with handle[0]")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     };
     let gop = return_with_error! {
         boot_services.open_protocol(
@@ -384,14 +423,14 @@ fn open_gop<'a>(
         Some(gop) => gop,
         None => {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!("Failed to get graphics output protocol with handle[0]")), true)
+                output_string!(b"true".to_iter_str(IterStrFormat::none()))
             };
             return Err(EFI_ABORTED);
         }
     };
 
     let _ = return_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Free graphics output protocol with handles buffer")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     };
     let _ = return_with_error! {
         boot_services.free_pool(unsafe {
@@ -438,7 +477,7 @@ fn open_root_dir<'a>(
     con_out: &ConOut,
 ) -> Result<&'a EfiFileProtocol, EfiStatus> {
     let _ = return_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Open loaded image protocol")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     };
     let loaded_image = return_with_error! {
         boot_services.open_protocol::<EfiLoadedImageProtocol>(
@@ -454,14 +493,14 @@ fn open_root_dir<'a>(
         Some(loaded_image) => loaded_image,
         None => {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!("Failed to get loaded image protocol")), true)
+                output_string!(b"true".to_iter_str(IterStrFormat::none()))
             };
             return Err(EFI_ABORTED);
         }
     };
 
     let _ = return_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Open simple file system protocol")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     };
     let fs = return_with_error! {
             boot_services.open_protocol::<EfiSimpleFileSystemProtocol>(
@@ -477,14 +516,14 @@ fn open_root_dir<'a>(
         Some(fs) => fs,
         None => {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!("Failed to get simple file system protocol")), true)
+                output_string!(b"true".to_iter_str(IterStrFormat::none()))
             };
             return Err(EFI_ABORTED);
         }
     };
 
     let _ = return_with_error! {
-        con_out.print(ValueWithFormat::String(utf16!("Open volume and get root directory")), true)
+        output_string!(b"true".to_iter_str(IterStrFormat::none()))
     };
     let root = match fs.open_volume() {
         Ok(root) => root,
@@ -554,7 +593,7 @@ fn save_memory_map(
 
         {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!(", ")), false)
+                output_string!(b"false".to_iter_str(IterStrFormat::none()))
             };
             let mut string_len = comma_string.get_buffer_size() - 2;
             let _ = return_with_error! {
@@ -580,7 +619,7 @@ fn save_memory_map(
 
         {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!(", ")), false)
+                output_string!(b"false".to_iter_str(IterStrFormat::none()))
             };
             let mut string_len = comma_string.get_buffer_size() - 2;
             let _ = return_with_error! {
@@ -606,7 +645,7 @@ fn save_memory_map(
 
         {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!(", ")), false)
+                output_string!(b"false".to_iter_str(IterStrFormat::none()))
             };
             let mut string_len = comma_string.get_buffer_size() - 2;
             let _ = return_with_error! {
@@ -632,7 +671,7 @@ fn save_memory_map(
 
         {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!(", ")), false)
+                output_string!(b"false".to_iter_str(IterStrFormat::none()))
             };
             let mut string_len = comma_string.get_buffer_size() - 2;
             let _ = return_with_error! {
@@ -658,7 +697,7 @@ fn save_memory_map(
 
         {
             let _ = return_with_error! {
-                con_out.print(ValueWithFormat::String(utf16!("\r\n")), false)
+                output_string!(b"false".to_iter_str(IterStrFormat::none()))
             };
             let mut string_len = new_line_string.get_buffer_size() - 2;
             let _ = return_with_error! {

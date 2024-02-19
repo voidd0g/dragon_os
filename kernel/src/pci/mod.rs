@@ -105,7 +105,7 @@ const DEVICE_COUNT: UnsignedInt8 = 32;
 impl BusScanner {
     pub const fn new() -> Self {
         Self {
-            devices_found: [PciDevice::new(0, 0, 0, 0); 32],
+            devices_found: [PciDevice::new(0, 0, 0, 0, [0; 4], 0); 32],
             devices_count: 0,
         }
     }
@@ -210,7 +210,17 @@ impl BusScanner {
     ) -> Result<(), ()> {
         match self.devices_found.get_mut(self.devices_count) {
             Some(found) => {
-                *found = PciDevice::new(bus, device, function, header_type);
+                let vendor_id = read_vendor_id(bus, device, function);
+                let (b, a, sub_class, base_class) =
+                    get_unsigned_int_8s(read_class_code(bus, device, function));
+                *found = PciDevice::new(
+                    bus,
+                    device,
+                    function,
+                    vendor_id,
+                    [base_class, sub_class, a, b],
+                    header_type,
+                );
                 self.devices_count += 1;
             }
             None => return Err(()),
@@ -224,6 +234,8 @@ pub struct PciDevice {
     bus: UnsignedInt8,
     device: UnsignedInt8,
     function: UnsignedInt8,
+    vendor_id: UnsignedInt16,
+    class_codes: [UnsignedInt8; 4],
     header_type: UnsignedInt8,
 }
 
@@ -232,13 +244,36 @@ impl PciDevice {
         bus: UnsignedInt8,
         device: UnsignedInt8,
         function: UnsignedInt8,
+        vendor_id: UnsignedInt16,
+        class_codes: [UnsignedInt8; 4],
         header_type: UnsignedInt8,
     ) -> Self {
         Self {
             bus,
             device,
             function,
+            vendor_id,
+            class_codes,
             header_type,
         }
+    }
+
+    pub fn bus(&self) -> UnsignedInt8 {
+        self.bus
+    }
+    pub fn device(&self) -> UnsignedInt8 {
+        self.device
+    }
+    pub fn function(&self) -> UnsignedInt8 {
+        self.function
+    }
+    pub fn vendor_id(&self) -> UnsignedInt16 {
+        self.vendor_id
+    }
+    pub fn class_codes(&self) -> [UnsignedInt8; 4] {
+        self.class_codes
+    }
+    pub fn header_type(&self) -> UnsignedInt8 {
+        self.header_type
     }
 }

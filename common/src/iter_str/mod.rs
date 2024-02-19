@@ -1,6 +1,6 @@
 pub mod unsigned_integer;
 
-use common::uefi::data_type::basic_type::{UnsignedInt8, UnsignedIntNative};
+use crate::uefi::data_type::basic_type::{UnsignedInt8, UnsignedIntNative};
 
 pub trait ToIterStr {
     fn to_iter_str(&self, formatter: IterStrFormat) -> impl Iterator<Item = UnsignedInt8>;
@@ -45,9 +45,9 @@ impl IterStrFormat {
 #[derive(Clone, Copy)]
 pub struct Padding(UnsignedInt8, UnsignedIntNative);
 impl Padding {
-	pub const fn new(letter: UnsignedInt8, count: UnsignedIntNative) -> Self {
-		Self(letter, count)
-	}
+    pub const fn new(letter: UnsignedInt8, count: UnsignedIntNative) -> Self {
+        Self(letter, count)
+    }
 
     pub fn get_padding_letter(&self) -> UnsignedInt8 {
         self.0

@@ -2,23 +2,26 @@
 #![no_main]
 
 mod font;
-mod iter_str;
 mod pci;
 mod pixel_writer;
 mod pointer;
 mod util;
 
-use core::{arch::asm, iter, panic::PanicInfo};
+use core::{arch::asm, panic::PanicInfo};
 
 use common::{
     argument::{Argument, FrameBufferConfig},
+    iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
     uefi::data_type::basic_type::{UnsignedInt32, UnsignedInt8},
 };
 use font::font_writer::{FONT_HEIGHT, FONT_WIDTH};
-use iter_str::{IterStrFormat, ToIterStr};
 
 use crate::{
-    font::font_writer::FontWriter, iter_str::{Padding, Radix}, pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, put_pixels}, pointer::PointerWriter, util::vector2::Vector2
+    font::font_writer::FontWriter,
+    pci::BusScanner,
+    pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, put_pixels},
+    pointer::PointerWriter,
+    util::vector2::Vector2,
 };
 
 #[panic_handler]
@@ -36,6 +39,22 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
                 Ok(res) => res,
                 Err(_) => end(),
             }
+        };
+    }
+
+    macro_rules! output_string {
+        ( $elements:expr, $color:expr, $pos:expr, $frame_buffer_config:ident ) => {
+            output_string($elements, $color, $pos, $frame_buffer_config)
+        };
+    }
+
+    macro_rules! output_string_elements {
+        ( $( $x:expr ),* ) => {
+            &mut [
+                $(
+                    &mut $x,
+                )*
+            ]
         };
     }
 
@@ -59,9 +78,41 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         )
     };
 
+    let mut bus_scanner = BusScanner::new();
     let _ = end_with_err! {
-        output_string(&mut [&mut b"ABCabc\nDEFdef\n".to_iter_str(IterStrFormat::none()), &mut 15u8.to_iter_str(IterStrFormat::new(Some(Radix::Binary), Some(true), Some(Padding::new(b'0', 8))))], PixelColor::new(128, 0, 0), Vector2::new(200, 200), frame_buffer_config)
+        bus_scanner.scan_all_devices()
     };
+    let mut height = 0;
+    for device in bus_scanner.devices_found() {
+        let class_codes = device.class_codes();
+        let _ = end_with_err! {
+            output_string!(
+                output_string_elements!(
+                    device.bus().to_iter_str(IterStrFormat::none()),
+                    b".".to_iter_str(IterStrFormat::none()),
+                    device.device().to_iter_str(IterStrFormat::none()),
+                    b".".to_iter_str(IterStrFormat::none()),
+                    device.function().to_iter_str(IterStrFormat::none()),
+                    b": vendor_id ".to_iter_str(IterStrFormat::none()),
+                    device.vendor_id().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 4)))),
+                    b", class_codes ".to_iter_str(IterStrFormat::none()),
+                    class_codes[0].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                    b"-".to_iter_str(IterStrFormat::none()),
+                    class_codes[1].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                    b"-".to_iter_str(IterStrFormat::none()),
+                    class_codes[2].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                    b"-".to_iter_str(IterStrFormat::none()),
+                    class_codes[3].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                    b", header_type ".to_iter_str(IterStrFormat::none()),
+                    device.header_type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2))))
+                ),
+                PixelColor::new(128, 0, 0),
+                Vector2::new(200, height),
+                frame_buffer_config
+            )
+        };
+        height += FONT_HEIGHT;
+    }
 
     let _ = end_with_err! {
         put_pixels(
