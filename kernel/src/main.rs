@@ -43,18 +43,12 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
     }
 
     macro_rules! output_string {
-        ( $elements:expr, $color:expr, $pos:expr, $frame_buffer_config:ident ) => {
-            output_string($elements, $color, $pos, $frame_buffer_config)
-        };
-    }
-
-    macro_rules! output_string_elements {
-        ( $( $x:expr ),* ) => {
-            &mut [
+        ( $color:expr, $pos:expr, $frame_buffer_config:ident, $( $x:expr ),* ) => {
+            output_string(&mut [
                 $(
                     &mut $x,
                 )*
-            ]
+            ], $color, $pos, $frame_buffer_config)
         };
     }
 
@@ -83,32 +77,40 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         bus_scanner.scan_all_devices()
     };
     let mut height = 0;
+    let _ = end_with_err! {
+        output_string!(
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, height),
+            frame_buffer_config,
+            bus_scanner.devices_found().len().to_iter_str(IterStrFormat::none()),
+            b" devices found.".to_iter_str(IterStrFormat::none())
+        )
+    };
+    height += FONT_HEIGHT;
     for device in bus_scanner.devices_found() {
         let class_codes = device.class_codes();
         let _ = end_with_err! {
             output_string!(
-                output_string_elements!(
-                    device.bus().to_iter_str(IterStrFormat::none()),
-                    b".".to_iter_str(IterStrFormat::none()),
-                    device.device().to_iter_str(IterStrFormat::none()),
-                    b".".to_iter_str(IterStrFormat::none()),
-                    device.function().to_iter_str(IterStrFormat::none()),
-                    b": vendor_id ".to_iter_str(IterStrFormat::none()),
-                    device.vendor_id().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 4)))),
-                    b", class_codes ".to_iter_str(IterStrFormat::none()),
-                    class_codes[0].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
-                    b"-".to_iter_str(IterStrFormat::none()),
-                    class_codes[1].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
-                    b"-".to_iter_str(IterStrFormat::none()),
-                    class_codes[2].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
-                    b"-".to_iter_str(IterStrFormat::none()),
-                    class_codes[3].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
-                    b", header_type ".to_iter_str(IterStrFormat::none()),
-                    device.header_type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2))))
-                ),
                 PixelColor::new(128, 0, 0),
-                Vector2::new(200, height),
-                frame_buffer_config
+                Vector2::new(0, height),
+                frame_buffer_config,
+                device.bus().to_iter_str(IterStrFormat::none()),
+                b".".to_iter_str(IterStrFormat::none()),
+                device.device().to_iter_str(IterStrFormat::none()),
+                b".".to_iter_str(IterStrFormat::none()),
+                device.function().to_iter_str(IterStrFormat::none()),
+                b": vendor_id ".to_iter_str(IterStrFormat::none()),
+                device.vendor_id().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 4)))),
+                b", class_codes ".to_iter_str(IterStrFormat::none()),
+                class_codes[0].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                b"-".to_iter_str(IterStrFormat::none()),
+                class_codes[1].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                b"-".to_iter_str(IterStrFormat::none()),
+                class_codes[2].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                b"-".to_iter_str(IterStrFormat::none()),
+                class_codes[3].to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2)))),
+                b", header_type ".to_iter_str(IterStrFormat::none()),
+                device.header_type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 2))))
             )
         };
         height += FONT_HEIGHT;

@@ -11,62 +11,62 @@ use crate::uefi::{
 };
 
 type EfiFileOpen = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    NewHandleOut: *mut *const EfiFileProtocol,
-    FileName: *const Char16,
-    OpenMode: UnsignedInt64,
-    Attributes: UnsignedInt64,
+    this: *const EfiFileProtocol,
+    new_handle_out: *mut *const EfiFileProtocol,
+    file_name: *const Char16,
+    open_mode: UnsignedInt64,
+    attributes: UnsignedInt64,
 ) -> EfiStatus;
 type EfiFileClose = unsafe extern "efiapi" fn(This: *const EfiFileProtocol) -> EfiStatus;
 type EfiFileDelete = unsafe extern "efiapi" fn(This: *const EfiFileProtocol) -> EfiStatus;
 type EfiFileRead = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    BufferSizeInOut: *mut UnsignedIntNative,
-    BufferOut: *mut Void,
+    this: *const EfiFileProtocol,
+    buffer_size_in_out: *mut UnsignedIntNative,
+    buffer_out: *mut Void,
 ) -> EfiStatus;
 type EfiFileWrite = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    BufferSizeInOut: *mut UnsignedIntNative,
-    Buffer: *const Void,
+    this: *const EfiFileProtocol,
+    buffer_size_in_out: *mut UnsignedIntNative,
+    buffer: *const Void,
 ) -> EfiStatus;
 type EfiFileGetPosition = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    PositionOut: *mut UnsignedInt64,
+    this: *const EfiFileProtocol,
+    position_out: *mut UnsignedInt64,
 ) -> EfiStatus;
 type EfiFileSetPosition =
     unsafe extern "efiapi" fn(This: *const EfiFileProtocol, Position: UnsignedInt64) -> EfiStatus;
 type EfiFileGetInfo = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    InformationType: *const EfiGuid,
-    BufferSizeInOut: *mut UnsignedIntNative,
-    BufferOut: *mut Void,
+    this: *const EfiFileProtocol,
+    information_type: *const EfiGuid,
+    buffer_size_in_out: *mut UnsignedIntNative,
+    buffer_out: *mut Void,
 ) -> EfiStatus;
 type EfiFileSetInfo = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    InformationType: *const EfiGuid,
-    BufferSize: UnsignedIntNative,
-    Buffer: *const Void,
+    this: *const EfiFileProtocol,
+    information_type: *const EfiGuid,
+    buffer_size: UnsignedIntNative,
+    buffer: *const Void,
 ) -> EfiStatus;
 type EfiFileFlush = unsafe extern "efiapi" fn(This: *const EfiFileProtocol) -> EfiStatus;
 type EfiFileOpenEx = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    NewHandleOut: *mut *const EfiFileProtocol,
-    FileName: *const Char16,
-    OpenMode: UnsignedInt64,
-    Attributes: UnsignedInt64,
-    TokenInOut: *mut EfiFileIoToken,
+    this: *const EfiFileProtocol,
+    new_handle_out: *mut *const EfiFileProtocol,
+    file_name: *const Char16,
+    open_mode: UnsignedInt64,
+    attributes: UnsignedInt64,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
 type EfiFileReadEx = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    TokenInOut: *mut EfiFileIoToken,
+    this: *const EfiFileProtocol,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
 type EfiFileWriteEx = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    TokenInOut: *mut EfiFileIoToken,
+    this: *const EfiFileProtocol,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
 type EfiFileFlushEx = unsafe extern "efiapi" fn(
-    This: *const EfiFileProtocol,
-    TokenInOut: *mut EfiFileIoToken,
+    this: *const EfiFileProtocol,
+    token_in_out: *mut EfiFileIoToken,
 ) -> EfiStatus;
 
 #[repr(C)]
@@ -167,4 +167,20 @@ impl EfiFileProtocol {
             v => Err(v),
         }
     }
+    pub fn set_info(&self, information_type: &EfiGuid,
+        buffer_size: UnsignedIntNative,
+        buffer: &[UnsignedInt8],) -> Result<(), EfiStatus> {
+            let status = unsafe {
+                (self.set_info)(
+                    self,
+                    information_type,
+                    buffer_size,
+                    buffer.as_ptr() as *const Void,
+                )
+            };
+            match status {
+                EFI_SUCCESS => Ok(()),
+                v => Err(v),
+            }
+        }
 }

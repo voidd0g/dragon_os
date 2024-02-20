@@ -12,7 +12,7 @@ fn make_pci_config_address(
     function: UnsignedInt8,
     register_address: UnsignedInt8,
 ) -> UnsignedInt32 {
-    const ENABLE_BIT_SHL: UnsignedInt32 = 1;
+    const ENABLE_BIT_SHL: UnsignedInt32 = 31;
     const ENABLE_BIT_MASK: UnsignedInt32 = 0x8000_0000;
     const BUS_SHL: UnsignedInt32 = 16;
     const BUS_MASK: UnsignedInt32 = 0x00FF_0000;
@@ -49,8 +49,8 @@ const CONFIG_DATA_ADDRESS: UnsignedInt16 = 0x0CFC;
 fn write_config_address(address: UnsignedInt32) {
     io_out(CONFIG_ADDRESS_ADDRESS, address)
 }
-fn write_config_data(address: UnsignedInt32) {
-    io_out(CONFIG_DATA_ADDRESS, address)
+fn write_config_data(data: UnsignedInt32) {
+    io_out(CONFIG_DATA_ADDRESS, data)
 }
 fn read_config_data() -> UnsignedInt32 {
     io_in(CONFIG_DATA_ADDRESS)
@@ -91,7 +91,7 @@ fn read_bus_numbers(
     read_config_data()
 }
 fn is_single_function_device(header_type: UnsignedInt8) -> bool {
-    header_type & 0x80 == 0
+    (header_type & 0x80) == 0
 }
 
 pub struct BusScanner {
@@ -137,6 +137,7 @@ impl BusScanner {
                     };
                 }
             }
+            return Err(())
         }
         Ok(())
     }
@@ -211,14 +212,14 @@ impl BusScanner {
         match self.devices_found.get_mut(self.devices_count) {
             Some(found) => {
                 let vendor_id = read_vendor_id(bus, device, function);
-                let (b, a, sub_class, base_class) =
+                let (revision_id, interface, sub_class, base_class) =
                     get_unsigned_int_8s(read_class_code(bus, device, function));
                 *found = PciDevice::new(
                     bus,
                     device,
                     function,
                     vendor_id,
-                    [base_class, sub_class, a, b],
+                    [base_class, sub_class, interface, revision_id],
                     header_type,
                 );
                 self.devices_count += 1;

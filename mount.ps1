@@ -1,7 +1,7 @@
 Param([Bool]$Debug)
 
 $C_CUR_PATH = Split-Path $MyInvocation.MyCommand.Path
-$C_VDISK_FILE = [IO.Path]::GetFullPath( (Join-Path $C_CUR_PATH ".\dragon_os.vhdx") )
+$C_VDISK_FILE = [IO.Path]::GetFullPath( (Join-Path $C_CUR_PATH "..\dragon_os_emulator\dragon_os_emulator.vhd") )
 
 Mount-DiskImage $C_VDISK_FILE
 
