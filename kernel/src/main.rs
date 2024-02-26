@@ -13,7 +13,6 @@ use core::{arch::asm, panic::PanicInfo};
 use common::{
     argument::Argument,
     iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
-    uefi::data_type::basic_type::{UnsignedInt16, UnsignedInt8},
 };
 use font::font_writer::FONT_HEIGHT;
 
@@ -153,10 +152,10 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
     };
     height += FONT_HEIGHT;
 
-    const XHCI_BASE_CLASS: UnsignedInt8 = 0x0C;
-    const XHCI_SUB_CLASS: UnsignedInt8 = 0x03;
-    const XHCI_INTERFACE: UnsignedInt8 = 0x30;
-    const INTEL_VENDOR_ID: UnsignedInt16 = 0x8086;
+    const XHCI_BASE_CLASS: u8 = 0x0C;
+    const XHCI_SUB_CLASS: u8 = 0x03;
+    const XHCI_INTERFACE: u8 = 0x30;
+    const INTEL_VENDOR_ID: u16 = 0x8086;
 
     let mut xhci_found = None;
     for device in bus_scanner.devices_found() {
@@ -204,9 +203,9 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
     height += FONT_HEIGHT;
 
     if xhci_found.vendor_id() == INTEL_VENDOR_ID {
-        const EHCI_BASE_CLASS: UnsignedInt8 = 0x0C;
-        const EHCI_SUB_CLASS: UnsignedInt8 = 0x03;
-        const EHCI_INTERFACE: UnsignedInt8 = 0x20;
+        const EHCI_BASE_CLASS: u8 = 0x0C;
+        const EHCI_SUB_CLASS: u8 = 0x03;
+        const EHCI_INTERFACE: u8 = 0x20;
         for device in bus_scanner.devices_found() {
             let class_codes = device.class_codes();
             if class_codes.base_class() == EHCI_BASE_CLASS

@@ -1,16 +1,16 @@
 use super::{
-    basic_type::{EfiPhysicalAddress, UnsignedInt32, UnsignedIntNative},
+    basic_type::EfiPhysicalAddress,
     efi_graphics_output_mode_information::EfiGraphicsOutputModeInformation,
 };
 
 #[repr(C)]
 pub struct EfiGraphicsOutputProtocolMode {
-    max_mode: UnsignedInt32,
-    mode: UnsignedInt32,
+    max_mode: u32,
+    mode: u32,
     info: *const EfiGraphicsOutputModeInformation,
-    size_of_info: UnsignedIntNative,
+    size_of_info: usize,
     frame_buffer_base: EfiPhysicalAddress,
-    frame_buffer_size: UnsignedIntNative,
+    frame_buffer_size: usize,
 }
 
 impl EfiGraphicsOutputProtocolMode {
@@ -21,7 +21,7 @@ impl EfiGraphicsOutputProtocolMode {
     pub fn frame_buffer_base(&self) -> EfiPhysicalAddress {
         self.frame_buffer_base
     }
-    pub fn frame_buffer_size(&self) -> UnsignedIntNative {
+    pub fn frame_buffer_size(&self) -> usize {
         self.frame_buffer_size
     }
 }

@@ -1,24 +1,20 @@
 use core::slice::Iter;
 
-use crate::uefi::data_type::basic_type::{
-    UnsignedInt16, UnsignedInt32, UnsignedInt64, UnsignedInt8, UnsignedIntNative,
-};
-
 use super::{IterStrFormat, Padding, Radix, ToIterStr};
 
 macro_rules! iter_str_of_unsigned_integer {
     ( $t:ty, $IterStrOf:ident ) => {
         impl ToIterStr for $t {
-            fn to_iter_str(&self, formatter: IterStrFormat) -> impl Iterator<Item = UnsignedInt8> {
+            fn to_iter_str(&self, formatter: IterStrFormat) -> impl Iterator<Item = u8> {
                 $IterStrOf::new(*self, formatter)
             }
         }
 
         struct $IterStrOf {
             value: $t,
-            header_iter_opt: Option<Iter<'static, UnsignedInt8>>,
-            padding_letter: UnsignedInt8,
-            padding_rest: UnsignedIntNative,
+            header_iter_opt: Option<Iter<'static, u8>>,
+            padding_letter: u8,
+            padding_rest: usize,
             base: $t,
             cur_div: $t,
         }
@@ -69,7 +65,7 @@ macro_rules! iter_str_of_unsigned_integer {
         }
 
         impl Iterator for $IterStrOf {
-            type Item = UnsignedInt8;
+            type Item = u8;
 
             fn next(&mut self) -> Option<Self::Item> {
                 match &mut self.header_iter_opt {
@@ -86,7 +82,7 @@ macro_rules! iter_str_of_unsigned_integer {
                 if self.cur_div == 0 {
                     None
                 } else {
-                    let mut ret = ((self.value / self.cur_div) % self.base) as UnsignedInt8;
+                    let mut ret = ((self.value / self.cur_div) % self.base) as u8;
                     if ret < 10 {
                         ret = b'0' + ret;
                     } else {
@@ -100,8 +96,8 @@ macro_rules! iter_str_of_unsigned_integer {
     };
 }
 
-iter_str_of_unsigned_integer! {UnsignedInt8, IterStrOfUnsignedInt8}
-iter_str_of_unsigned_integer! {UnsignedInt16, IterStrOfUnsignedInt16}
-iter_str_of_unsigned_integer! {UnsignedInt32, IterStrOfUnsignedInt32}
-iter_str_of_unsigned_integer! {UnsignedInt64, IterStrOfUnsignedInt64}
-iter_str_of_unsigned_integer! {UnsignedIntNative, IterStrOfUnsignedIntNative}
+iter_str_of_unsigned_integer! {u8, IterStrOfu8}
+iter_str_of_unsigned_integer! {u16, IterStrOfu16}
+iter_str_of_unsigned_integer! {u32, IterStrOfu32}
+iter_str_of_unsigned_integer! {u64, IterStrOfu64}
+iter_str_of_unsigned_integer! {usize, IterStrOfusize}

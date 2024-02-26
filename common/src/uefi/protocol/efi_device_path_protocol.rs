@@ -1,8 +1,6 @@
-use crate::uefi::data_type::basic_type::UnsignedInt8;
-
 #[repr(C)]
 pub struct EfiDevicePathProtocol {
-    r#type: UnsignedInt8,
-    sub_type: UnsignedInt8,
-    length: [UnsignedInt8; 2],
+    r#type: u8,
+    sub_type: u8,
+    length: [u8; 2],
 }

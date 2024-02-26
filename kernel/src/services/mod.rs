@@ -5,9 +5,7 @@ use common::{
             PIXEL_BLUE_GREEN_RED_RESERVED8_BIT_PER_COLOR,
             PIXEL_RED_GREEN_BLUE_RESERVED8_BIT_PER_COLOR,
         },
-        data_type::basic_type::{
-            EfiGraphicsPixelFormat, UnsignedInt32, UnsignedInt8, UnsignedIntNative,
-        },
+        data_type::basic_type::EfiGraphicsPixelFormat,
         table::efi_runtime_services::EfiRuntimeServices,
     },
 };
@@ -48,9 +46,7 @@ impl<'a> TimeServices<'a> {
         Self { runtime_services }
     }
 
-    pub fn wait_for_milli_seconds(milli_seconds: UnsignedInt32) -> () {
-		
-	}
+    pub fn wait_for_milli_seconds(milli_seconds: u32) -> () {}
 }
 
 pub struct DrawServices<'a> {
@@ -67,7 +63,7 @@ impl<'a> DrawServices<'a> {
     pub fn put_pixel<T: PixelWriter<U>, U: PixelLineWriter>(
         &self,
         color: PixelColor,
-        pos: Vector2<UnsignedIntNative>,
+        pos: Vector2<usize>,
     ) -> Result<(), ()> {
         put_pixel(
             self.frame_buffer_config.pixels_per_scan_line(),
@@ -89,9 +85,9 @@ impl<'a> DrawServices<'a> {
 
     pub fn output_string(
         &self,
-        elements: &mut [&mut dyn Iterator<Item = UnsignedInt8>],
+        elements: &mut [&mut dyn Iterator<Item = u8>],
         color: PixelColor,
-        start_pos: Vector2<UnsignedInt32>,
+        start_pos: Vector2<u32>,
     ) -> Result<(), ()> {
         let mut cur_pos = start_pos;
         let mut elements_iter = elements.iter_mut();
@@ -131,15 +127,15 @@ macro_rules! output_string {
 }
 
 pub fn put_pixel(
-    pixels_per_scan_line: UnsignedInt32,
+    pixels_per_scan_line: u32,
     pixel_format: EfiGraphicsPixelFormat,
-    frame_buffer: &mut [UnsignedInt8],
+    frame_buffer: &mut [u8],
     color: PixelColor,
-    pos: Vector2<UnsignedIntNative>,
+    pos: Vector2<usize>,
 ) -> Result<(), ()> {
     match pixel_format {
         PIXEL_RED_GREEN_BLUE_RESERVED8_BIT_PER_COLOR => {
-            let pixel_start_pos = pixels_per_scan_line as UnsignedIntNative * pos.y() + pos.x();
+            let pixel_start_pos = pixels_per_scan_line as usize * pos.y() + pos.x();
             let mut iter = frame_buffer.iter_mut();
             match (
                 iter.nth(pixel_start_pos),
@@ -158,7 +154,7 @@ pub fn put_pixel(
             }
         }
         PIXEL_BLUE_GREEN_RED_RESERVED8_BIT_PER_COLOR => {
-            let pixel_start_pos = pixels_per_scan_line as UnsignedIntNative * pos.y() + pos.x();
+            let pixel_start_pos = pixels_per_scan_line as usize * pos.y() + pos.x();
             let mut iter = frame_buffer.iter_mut();
             match (
                 iter.nth(pixel_start_pos * 4),
@@ -181,17 +177,16 @@ pub fn put_pixel(
 }
 
 pub fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(
-    pixels_per_scan_line: UnsignedInt32,
+    pixels_per_scan_line: u32,
     pixel_format: EfiGraphicsPixelFormat,
-    frame_buffer: &mut [UnsignedInt8],
+    frame_buffer: &mut [u8],
     mut pixels: T,
 ) -> Result<(), ()> {
     match pixel_format {
         PIXEL_RED_GREEN_BLUE_RESERVED8_BIT_PER_COLOR => 'a: loop {
             match pixels.next() {
                 Some((mut colors, pos)) => {
-                    let mut pixel_start_pos =
-                        pixels_per_scan_line as UnsignedIntNative * pos.y() + pos.x();
+                    let mut pixel_start_pos = pixels_per_scan_line as usize * pos.y() + pos.x();
                     let mut iter = frame_buffer.iter_mut();
                     if pixel_start_pos > 0 {
                         iter.nth(pixel_start_pos * 4 - 1);
@@ -234,8 +229,7 @@ pub fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(
         PIXEL_BLUE_GREEN_RED_RESERVED8_BIT_PER_COLOR => 'a: loop {
             match pixels.next() {
                 Some((mut colors, pos)) => {
-                    let mut pixel_start_pos =
-                        pixels_per_scan_line as UnsignedIntNative * pos.y() + pos.x();
+                    let mut pixel_start_pos = pixels_per_scan_line as usize * pos.y() + pos.x();
                     let mut iter = frame_buffer.iter_mut();
                     if pixel_start_pos > 0 {
                         iter.nth(pixel_start_pos * 4 - 1);

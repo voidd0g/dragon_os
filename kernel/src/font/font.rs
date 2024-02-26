@@ -1,6 +1,4 @@
-use common::uefi::data_type::basic_type::{Char8, UnsignedInt8};
-
-pub fn get_font_data(ch: Char8) -> &'static [UnsignedInt8] {
+pub fn get_font_data(ch: u8) -> &'static [u8] {
     match ch {
         0x00 => &[
             0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,

@@ -1,10 +1,10 @@
-use super::basic_type::{Boolean, Int32};
+use super::basic_type::Boolean;
 
 #[repr(C)]
 pub struct SimpleTextOutputMode {
-    max_mode: Int32,
-    attribute: Int32,
-    cursor_column: Int32,
-    cursor_row: Int32,
+    max_mode: i32,
+    attribute: i32,
+    cursor_column: i32,
+    cursor_row: i32,
     cursor_visible: Boolean,
 }

@@ -1,9 +1,7 @@
-use super::basic_type::UnsignedInt32;
-
 #[repr(C)]
 pub struct EfiGraphicsOutputBltPixel {
-    blue: UnsignedInt32,
-    green: UnsignedInt32,
-    red: UnsignedInt32,
-    reserved: UnsignedInt32,
+    blue: u32,
+    green: u32,
+    red: u32,
+    reserved: u32,
 }

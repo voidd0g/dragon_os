@@ -1,10 +1,7 @@
 use core::slice;
 
 use crate::uefi::{
-    data_type::basic_type::{
-        EfiGraphicsPixelFormat, UnsignedInt32, UnsignedInt8, UnsignedIntNative,
-    },
-    table::efi_runtime_services::EfiRuntimeServices,
+    data_type::basic_type::EfiGraphicsPixelFormat, table::efi_runtime_services::EfiRuntimeServices,
 };
 
 #[repr(C)]
@@ -35,21 +32,21 @@ impl Argument {
 
 #[repr(C)]
 pub struct FrameBufferConfig {
-    frame_buffer: *mut UnsignedInt8,
-    frame_buffer_size: UnsignedIntNative,
-    pixels_per_scan_line: UnsignedInt32,
-    horizontal_resolution: UnsignedInt32,
-    vertical_resolution: UnsignedInt32,
+    frame_buffer: *mut u8,
+    frame_buffer_size: usize,
+    pixels_per_scan_line: u32,
+    horizontal_resolution: u32,
+    vertical_resolution: u32,
     pixel_format: EfiGraphicsPixelFormat,
 }
 
 impl FrameBufferConfig {
     pub fn new(
-        frame_buffer: *mut UnsignedInt8,
-        frame_buffer_size: UnsignedIntNative,
-        pixels_per_scan_line: UnsignedInt32,
-        horizontal_resolution: UnsignedInt32,
-        vertical_resolution: UnsignedInt32,
+        frame_buffer: *mut u8,
+        frame_buffer_size: usize,
+        pixels_per_scan_line: u32,
+        horizontal_resolution: u32,
+        vertical_resolution: u32,
         pixel_format: EfiGraphicsPixelFormat,
     ) -> Self {
         Self {
@@ -62,19 +59,19 @@ impl FrameBufferConfig {
         }
     }
 
-    pub fn frame_buffer(&self) -> &mut [UnsignedInt8] {
+    pub fn frame_buffer(&self) -> &mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.frame_buffer, self.frame_buffer_size) }
     }
 
-    pub fn pixels_per_scan_line(&self) -> UnsignedInt32 {
+    pub fn pixels_per_scan_line(&self) -> u32 {
         self.pixels_per_scan_line
     }
 
-    pub fn horizontal_resolution(&self) -> UnsignedInt32 {
+    pub fn horizontal_resolution(&self) -> u32 {
         self.horizontal_resolution
     }
 
-    pub fn vertical_resolution(&self) -> UnsignedInt32 {
+    pub fn vertical_resolution(&self) -> u32 {
         self.vertical_resolution
     }
 

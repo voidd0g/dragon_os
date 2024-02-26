@@ -1,16 +1,16 @@
-use super::basic_type::{EfiPhysicalAddress, EfiVirtualAddress, UnsignedInt32, UnsignedInt64};
+use super::basic_type::{EfiPhysicalAddress, EfiVirtualAddress};
 
 #[repr(C)]
 pub struct EfiMemoryDescriptor {
-    r#type: UnsignedInt32,
+    r#type: u32,
     physical_start: EfiPhysicalAddress,
     virtual_start: EfiVirtualAddress,
-    number_of_pages: UnsignedInt64,
-    attribute: UnsignedInt64,
+    number_of_pages: u64,
+    attribute: u64,
 }
 
 impl EfiMemoryDescriptor {
-    pub fn r#type(&self) -> UnsignedInt32 {
+    pub fn r#type(&self) -> u32 {
         self.r#type
     }
     pub fn physical_start(&self) -> EfiPhysicalAddress {
@@ -19,10 +19,10 @@ impl EfiMemoryDescriptor {
     pub fn virtual_start(&self) -> EfiVirtualAddress {
         self.virtual_start
     }
-    pub fn number_of_pages(&self) -> UnsignedInt64 {
+    pub fn number_of_pages(&self) -> u64 {
         self.number_of_pages
     }
-    pub fn attribute(&self) -> UnsignedInt64 {
+    pub fn attribute(&self) -> u64 {
         self.attribute
     }
 }

@@ -1,22 +1,16 @@
-use common::uefi::data_type::basic_type::{UnsignedInt32, UnsignedIntNative};
-
 use crate::util::vector2::Vector2;
 
 use super::{pixel_color::PixelColor, PixelLineWriter, PixelWriter};
 
 pub struct DrawRect {
     color: PixelColor,
-    pos: Vector2<UnsignedInt32>,
-    size: Vector2<UnsignedInt32>,
-    index: UnsignedIntNative,
+    pos: Vector2<u32>,
+    size: Vector2<u32>,
+    index: usize,
 }
 
 impl DrawRect {
-    pub const fn new(
-        color: PixelColor,
-        pos: Vector2<UnsignedInt32>,
-        size: Vector2<UnsignedInt32>,
-    ) -> Self {
+    pub const fn new(color: PixelColor, pos: Vector2<u32>, size: Vector2<u32>) -> Self {
         Self {
             color,
             pos,
@@ -27,16 +21,13 @@ impl DrawRect {
 }
 
 impl Iterator for DrawRect {
-    type Item = (DrawRectLine, Vector2<UnsignedIntNative>);
+    type Item = (DrawRectLine, Vector2<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.size.y() as UnsignedIntNative {
+        if self.index < self.size.y() as usize {
             let ret = (
                 DrawRectLine::new(self.color, self.size.x()),
-                Vector2::new(
-                    self.pos.x() as UnsignedIntNative,
-                    self.pos.y() as UnsignedIntNative + self.index,
-                ),
+                Vector2::new(self.pos.x() as usize, self.pos.y() as usize + self.index),
             );
             self.index += 1;
             Some(ret)
@@ -50,12 +41,12 @@ impl PixelWriter<DrawRectLine> for DrawRect {}
 
 pub struct DrawRectLine {
     color: PixelColor,
-    width: UnsignedInt32,
-    index: UnsignedIntNative,
+    width: u32,
+    index: usize,
 }
 
 impl DrawRectLine {
-    pub const fn new(color: PixelColor, width: UnsignedInt32) -> Self {
+    pub const fn new(color: PixelColor, width: u32) -> Self {
         Self {
             color,
             width,
@@ -68,7 +59,7 @@ impl Iterator for DrawRectLine {
     type Item = Option<PixelColor>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.width as UnsignedIntNative {
+        if self.index < self.width as usize {
             let ret = self.color;
             self.index += 1;
             Some(Some(ret))

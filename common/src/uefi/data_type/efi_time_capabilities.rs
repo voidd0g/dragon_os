@@ -1,8 +1,8 @@
-use super::basic_type::{Boolean, UnsignedInt32};
+use super::basic_type::Boolean;
 
 #[repr(C)]
 pub struct EfiTimeCapabilities {
-    resolution: UnsignedInt32,
-    accuracy: UnsignedInt32,
+    resolution: u32,
+    accuracy: u32,
     sets_to_zero: Boolean,
 }

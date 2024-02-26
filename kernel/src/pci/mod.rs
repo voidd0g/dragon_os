@@ -2,36 +2,27 @@ pub mod xhci;
 
 use core::arch::asm;
 
-use common::uefi::data_type::basic_type::{
-    UnsignedInt16, UnsignedInt32, UnsignedInt64, UnsignedInt8, UnsignedIntNative,
-};
-
 use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
 
-fn make_pci_config_address(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-    register_address: UnsignedInt8,
-) -> UnsignedInt32 {
-    const ENABLE_BIT_SHL: UnsignedInt32 = 31;
-    const ENABLE_BIT_MASK: UnsignedInt32 = 0x8000_0000;
-    const BUS_SHL: UnsignedInt32 = 16;
-    const BUS_MASK: UnsignedInt32 = 0x00FF_0000;
-    const DEVICE_SHL: UnsignedInt32 = 11;
-    const DEVICE_MASK: UnsignedInt32 = 0x0000_F800;
-    const FUNCTION_SHL: UnsignedInt32 = 8;
-    const FUNCTION_MASK: UnsignedInt32 = 0x0000_0700;
-    const REGISTER_ADDRESS_SHL: UnsignedInt32 = 0;
-    const REGISTER_ADDRESS_MASK: UnsignedInt32 = 0x0000_00FF;
+fn make_pci_config_address(bus: u8, device: u8, function: u8, register_address: u8) -> u32 {
+    const ENABLE_BIT_SHL: u32 = 31;
+    const ENABLE_BIT_MASK: u32 = 0x8000_0000;
+    const BUS_SHL: u32 = 16;
+    const BUS_MASK: u32 = 0x00FF_0000;
+    const DEVICE_SHL: u32 = 11;
+    const DEVICE_MASK: u32 = 0x0000_F800;
+    const FUNCTION_SHL: u32 = 8;
+    const FUNCTION_MASK: u32 = 0x0000_0700;
+    const REGISTER_ADDRESS_SHL: u32 = 0;
+    const REGISTER_ADDRESS_MASK: u32 = 0x0000_00FF;
     ((1 << ENABLE_BIT_SHL) & ENABLE_BIT_MASK)
-        | (((bus as UnsignedInt32) << BUS_SHL) & BUS_MASK)
-        | (((device as UnsignedInt32) << DEVICE_SHL) & DEVICE_MASK)
-        | (((function as UnsignedInt32) << FUNCTION_SHL) & FUNCTION_MASK)
-        | (((register_address as UnsignedInt32) << REGISTER_ADDRESS_SHL) & REGISTER_ADDRESS_MASK)
+        | (((bus as u32) << BUS_SHL) & BUS_MASK)
+        | (((device as u32) << DEVICE_SHL) & DEVICE_MASK)
+        | (((function as u32) << FUNCTION_SHL) & FUNCTION_MASK)
+        | (((register_address as u32) << REGISTER_ADDRESS_SHL) & REGISTER_ADDRESS_MASK)
 }
 
-fn io_in(address: UnsignedInt16) -> UnsignedInt32 {
+fn io_in(address: u16) -> u32 {
     let ret;
     unsafe {
         asm!("in eax, dx", out("eax") ret, in("dx") address);
@@ -39,122 +30,84 @@ fn io_in(address: UnsignedInt16) -> UnsignedInt32 {
     ret
 }
 
-fn io_out(address: UnsignedInt16, data: UnsignedInt32) {
+fn io_out(address: u16, data: u32) {
     unsafe {
         asm!("out dx, eax", in("dx") address, in("eax") data);
     }
 }
 
-const CONFIG_ADDRESS_ADDRESS: UnsignedInt16 = 0x0CF8;
-const CONFIG_DATA_ADDRESS: UnsignedInt16 = 0x0CFC;
+const CONFIG_ADDRESS_ADDRESS: u16 = 0x0CF8;
+const CONFIG_DATA_ADDRESS: u16 = 0x0CFC;
 
-fn write_config_address(address: UnsignedInt32) {
+fn write_config_address(address: u32) {
     io_out(CONFIG_ADDRESS_ADDRESS, address)
 }
-fn write_config_data(data: UnsignedInt32) {
+fn write_config_data(data: u32) {
     io_out(CONFIG_DATA_ADDRESS, data)
 }
-fn read_config_data() -> UnsignedInt32 {
+fn read_config_data() -> u32 {
     io_in(CONFIG_DATA_ADDRESS)
 }
 
-const INVALID_VENDOR_ID: UnsignedInt16 = 0xFFFF;
+const INVALID_VENDOR_ID: u16 = 0xFFFF;
 
-fn read_vendor_id(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt16 {
+fn read_vendor_id(bus: u8, device: u8, function: u8) -> u16 {
     write_config_address(make_pci_config_address(bus, device, function, 0x00));
     get_unsigned_int_16s(read_config_data()).0
 }
-fn read_header_type(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt8 {
+fn read_header_type(bus: u8, device: u8, function: u8) -> u8 {
     write_config_address(make_pci_config_address(bus, device, function, 0x0C));
     get_unsigned_int_8s(read_config_data()).2
 }
-fn read_class_code(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt32 {
+fn read_class_code(bus: u8, device: u8, function: u8) -> u32 {
     write_config_address(make_pci_config_address(bus, device, function, 0x08));
     read_config_data()
 }
-fn read_bus_numbers(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt32 {
+fn read_bus_numbers(bus: u8, device: u8, function: u8) -> u32 {
     write_config_address(make_pci_config_address(bus, device, function, 0x18));
     read_config_data()
 }
-fn read_base_address_register0(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt64 {
+fn read_base_address_register0(bus: u8, device: u8, function: u8) -> u64 {
     write_config_address(make_pci_config_address(bus, device, function, 0x10));
     let lo = read_config_data();
 
     if lo & 0x0000_0006 == 0 {
-        (lo as UnsignedInt64) & 0xFFFF_FFFF_FFFF_FFF0
+        (lo as u64) & 0xFFFF_FFFF_FFFF_FFF0
     } else {
         write_config_address(make_pci_config_address(bus, device, function, 0x14));
         let hi = read_config_data();
-        (lo as UnsignedInt64 + ((hi as UnsignedInt64) << 32)) & 0xFFFF_FFFF_FFFF_FFF0
+        (lo as u64 + ((hi as u64) << 32)) & 0xFFFF_FFFF_FFFF_FFF0
     }
 }
-fn read_xusb2_port_routing_mask(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt32 {
+fn read_xusb2_port_routing_mask(bus: u8, device: u8, function: u8) -> u32 {
     write_config_address(make_pci_config_address(bus, device, function, 0xD4));
     read_config_data()
 }
-fn read_usb3_port_routing_mask(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-) -> UnsignedInt32 {
+fn read_usb3_port_routing_mask(bus: u8, device: u8, function: u8) -> u32 {
     write_config_address(make_pci_config_address(bus, device, function, 0xDC));
     read_config_data()
 }
 
-fn write_xusb2_port_routing(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-    value: UnsignedInt32,
-) {
+fn write_xusb2_port_routing(bus: u8, device: u8, function: u8, value: u32) {
     write_config_address(make_pci_config_address(bus, device, function, 0xD0));
     write_config_data(value)
 }
-fn write_usb3_port_super_speed_enable(
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-    value: UnsignedInt32,
-) {
+fn write_usb3_port_super_speed_enable(bus: u8, device: u8, function: u8, value: u32) {
     write_config_address(make_pci_config_address(bus, device, function, 0xD8));
     write_config_data(value)
 }
 
-fn is_single_function_device(header_type: UnsignedInt8) -> bool {
+fn is_single_function_device(header_type: u8) -> bool {
     (header_type & 0x80) == 0
 }
 
 pub struct BusScanner {
     devices_found: [PciDevice; 32],
-    devices_count: UnsignedIntNative,
+    devices_count: usize,
 }
 
-const FUNCTION_COUNT: UnsignedInt8 = 8;
-const DEVICE_COUNT: UnsignedInt8 = 32;
+const FUNCTION_COUNT: u8 = 8;
+const DEVICE_COUNT: u8 = 32;
 
 impl BusScanner {
     pub const fn new() -> Self {
@@ -196,7 +149,7 @@ impl BusScanner {
         Ok(())
     }
 
-    fn scan_bus(&mut self, bus: UnsignedInt8) -> Result<(), ()> {
+    fn scan_bus(&mut self, bus: u8) -> Result<(), ()> {
         for device in 0..DEVICE_COUNT {
             let vendor_id = read_vendor_id(bus, device, 0);
             if vendor_id != INVALID_VENDOR_ID {
@@ -209,7 +162,7 @@ impl BusScanner {
         Ok(())
     }
 
-    fn scan_device(&mut self, bus: UnsignedInt8, device: UnsignedInt8) -> Result<(), ()> {
+    fn scan_device(&mut self, bus: u8, device: u8) -> Result<(), ()> {
         let _ = match self.scan_function(bus, device, 0) {
             Ok(res) => res,
             Err(v) => return Err(v),
@@ -230,12 +183,7 @@ impl BusScanner {
         Ok(())
     }
 
-    fn scan_function(
-        &mut self,
-        bus: UnsignedInt8,
-        device: UnsignedInt8,
-        function: UnsignedInt8,
-    ) -> Result<(), ()> {
+    fn scan_function(&mut self, bus: u8, device: u8, function: u8) -> Result<(), ()> {
         let header_type = read_header_type(bus, device, function);
         let _ = match self.add_device(bus, device, function, header_type) {
             Ok(res) => res,
@@ -256,13 +204,7 @@ impl BusScanner {
         Ok(())
     }
 
-    fn add_device(
-        &mut self,
-        bus: UnsignedInt8,
-        device: UnsignedInt8,
-        function: UnsignedInt8,
-        header_type: UnsignedInt8,
-    ) -> Result<(), ()> {
+    fn add_device(&mut self, bus: u8, device: u8, function: u8, header_type: u8) -> Result<(), ()> {
         match self.devices_found.get_mut(self.devices_count) {
             Some(found) => {
                 let vendor_id = read_vendor_id(bus, device, function);
@@ -286,22 +228,22 @@ impl BusScanner {
 
 #[derive(Clone, Copy)]
 pub struct PciDevice {
-    bus: UnsignedInt8,
-    device: UnsignedInt8,
-    function: UnsignedInt8,
-    vendor_id: UnsignedInt16,
+    bus: u8,
+    device: u8,
+    function: u8,
+    vendor_id: u16,
     class_codes: PciDevieClassCodes,
-    header_type: UnsignedInt8,
+    header_type: u8,
 }
 
 impl PciDevice {
     pub const fn new(
-        bus: UnsignedInt8,
-        device: UnsignedInt8,
-        function: UnsignedInt8,
-        vendor_id: UnsignedInt16,
+        bus: u8,
+        device: u8,
+        function: u8,
+        vendor_id: u16,
         class_codes: PciDevieClassCodes,
-        header_type: UnsignedInt8,
+        header_type: u8,
     ) -> Self {
         Self {
             bus,
@@ -313,26 +255,26 @@ impl PciDevice {
         }
     }
 
-    pub fn bus(&self) -> UnsignedInt8 {
+    pub fn bus(&self) -> u8 {
         self.bus
     }
-    pub fn device(&self) -> UnsignedInt8 {
+    pub fn device(&self) -> u8 {
         self.device
     }
-    pub fn function(&self) -> UnsignedInt8 {
+    pub fn function(&self) -> u8 {
         self.function
     }
-    pub fn vendor_id(&self) -> UnsignedInt16 {
+    pub fn vendor_id(&self) -> u16 {
         self.vendor_id
     }
     pub fn class_codes(&self) -> PciDevieClassCodes {
         self.class_codes
     }
-    pub fn header_type(&self) -> UnsignedInt8 {
+    pub fn header_type(&self) -> u8 {
         self.header_type
     }
 
-    pub fn base_address_register0(&self) -> UnsignedInt64 {
+    pub fn base_address_register0(&self) -> u64 {
         read_base_address_register0(self.bus, self.device, self.function)
     }
 
@@ -356,19 +298,14 @@ impl PciDevice {
 
 #[derive(Clone, Copy)]
 pub struct PciDevieClassCodes {
-    base_class: UnsignedInt8,
-    sub_class: UnsignedInt8,
-    interface: UnsignedInt8,
-    revision_id: UnsignedInt8,
+    base_class: u8,
+    sub_class: u8,
+    interface: u8,
+    revision_id: u8,
 }
 
 impl PciDevieClassCodes {
-    pub const fn new(
-        base_class: UnsignedInt8,
-        sub_class: UnsignedInt8,
-        interface: UnsignedInt8,
-        revision_id: UnsignedInt8,
-    ) -> Self {
+    pub const fn new(base_class: u8, sub_class: u8, interface: u8, revision_id: u8) -> Self {
         Self {
             base_class,
             sub_class,
@@ -377,13 +314,13 @@ impl PciDevieClassCodes {
         }
     }
 
-    pub fn base_class(&self) -> UnsignedInt8 {
+    pub fn base_class(&self) -> u8 {
         self.base_class
     }
-    pub fn sub_class(&self) -> UnsignedInt8 {
+    pub fn sub_class(&self) -> u8 {
         self.sub_class
     }
-    pub fn interface(&self) -> UnsignedInt8 {
+    pub fn interface(&self) -> u8 {
         self.interface
     }
 }

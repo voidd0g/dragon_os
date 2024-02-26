@@ -1,9 +1,6 @@
 use core::ptr::null;
 
-use crate::uefi::{
-    constant::efi_status::EFI_SUCCESS,
-    data_type::basic_type::{EfiStatus, UnsignedInt64},
-};
+use crate::uefi::{constant::efi_status::EFI_SUCCESS, data_type::basic_type::EfiStatus};
 
 use super::efi_file_protocol::EfiFileProtocol;
 
@@ -14,7 +11,7 @@ type EfiSimpleFileSystemProtocolOpenVolume = unsafe extern "efiapi" fn(
 
 #[repr(C)]
 pub struct EfiSimpleFileSystemProtocol {
-    revision: UnsignedInt64,
+    revision: u64,
     open_volume: EfiSimpleFileSystemProtocolOpenVolume,
 }
 

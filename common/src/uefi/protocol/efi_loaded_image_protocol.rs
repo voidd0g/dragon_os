@@ -1,7 +1,5 @@
 use crate::uefi::{
-    data_type::basic_type::{
-        EfiHandle, EfiMemoryType, EfiStatus, UnsignedInt32, UnsignedInt64, Void,
-    },
+    data_type::basic_type::{EfiHandle, EfiMemoryType, EfiStatus, Void},
     table::efi_system_table::EfiSystemTable,
 };
 
@@ -11,7 +9,7 @@ type EfiImageUnload = unsafe extern "efiapi" fn(image_handle: EfiHandle) -> EfiS
 
 #[repr(C)]
 pub struct EfiLoadedImageProtocol {
-    revision: UnsignedInt32,
+    revision: u32,
     parent_handle: EfiHandle,
     system_table: *const EfiSystemTable,
 
@@ -19,11 +17,11 @@ pub struct EfiLoadedImageProtocol {
     file_path: *const EfiDevicePathProtocol,
     reserved: *const Void,
 
-    load_options_size: UnsignedInt32,
+    load_options_size: u32,
     load_options: *const Void,
 
     image_base: *const Void,
-    image_size: UnsignedInt64,
+    image_size: u64,
     image_code_type: EfiMemoryType,
     image_data_type: EfiMemoryType,
     unload: EfiImageUnload,

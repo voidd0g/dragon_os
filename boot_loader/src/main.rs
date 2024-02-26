@@ -26,8 +26,7 @@ use common::{
         },
         data_type::{
             basic_type::{
-                Char16, EfiHandle, EfiPhysicalAddress, EfiStatus, UnsignedInt32, UnsignedInt64,
-                UnsignedInt8, UnsignedIntNative, Void,
+                EfiHandle, EfiPhysicalAddress, EfiStatus, Void,
             },
             efi_file_info::EfiFileInfo,
             efi_memory_descriptor::EfiMemoryDescriptor,
@@ -50,8 +49,8 @@ use core::{
     slice,
 };
 
-fn ascii_to_utf16_literal<const N: usize>(ascii: &[UnsignedInt8; N]) -> [Char16; N] {
-    ascii.map(|v| v as Char16)
+fn ascii_to_utf16_literal<const N: usize>(ascii: &[u8; N]) -> [u16; N] {
+    ascii.map(|v| v as u16)
 }
 
 macro_rules! output_string_cout {
@@ -136,7 +135,7 @@ pub extern "efiapi" fn efi_main(
     end_with_error! {
         output_string_cout!(cout, b"Open memmap file\r\n".to_iter_str(IterStrFormat::none()))
     }
-    const MEMMAP_FILE_NAME: &[UnsignedInt8; 11] = b"memmap.txt\0";
+    const MEMMAP_FILE_NAME: &[u8; 11] = b"memmap.txt\0";
     let memmap_file = log_and_end_with_error! {
         root_dir.open(
             &ascii_to_utf16_literal(MEMMAP_FILE_NAME),
@@ -148,8 +147,8 @@ pub extern "efiapi" fn efi_main(
     end_with_error! {
         output_string_cout!(cout, b"Get memmap file info\r\n".to_iter_str(IterStrFormat::none()))
     }
-    const MEMMAP_FILE_INFO_BUFFER_SIZE: UnsignedIntNative =
-        size_of::<EfiFileInfo>() + size_of::<Char16>() * MEMMAP_FILE_NAME.len();
+    const MEMMAP_FILE_INFO_BUFFER_SIZE: usize =
+        size_of::<EfiFileInfo>() + size_of::<u16>() * MEMMAP_FILE_NAME.len();
     let mut memmap_file_info_buffer_size = MEMMAP_FILE_INFO_BUFFER_SIZE;
     let mut memmap_file_info_buffer = [0; MEMMAP_FILE_INFO_BUFFER_SIZE];
     let _ = log_and_end_with_error! {
@@ -193,7 +192,7 @@ pub extern "efiapi" fn efi_main(
     end_with_error! {
         output_string_cout!(cout, b"Open kernel file\r\n".to_iter_str(IterStrFormat::none()))
     }
-    const KERNEL_FILE_NAME: &[UnsignedInt8; 11] = b"KERNEL.ELF\0";
+    const KERNEL_FILE_NAME: &[u8; 11] = b"KERNEL.ELF\0";
     let kernel_file = log_and_end_with_error! {
         root_dir.open(&ascii_to_utf16_literal(KERNEL_FILE_NAME), EFI_FILE_MODE_READ, 0)
     };
@@ -201,8 +200,8 @@ pub extern "efiapi" fn efi_main(
     end_with_error! {
         output_string_cout!(cout, b"Get kernel file info\r\n".to_iter_str(IterStrFormat::none()))
     }
-    const KERNEL_FILE_INFO_BUFFER_SIZE: UnsignedIntNative =
-        size_of::<EfiFileInfo>() + size_of::<Char16>() * KERNEL_FILE_NAME.len();
+    const KERNEL_FILE_INFO_BUFFER_SIZE: usize =
+        size_of::<EfiFileInfo>() + size_of::<u16>() * KERNEL_FILE_NAME.len();
     let mut kernel_file_info_buffer_size = KERNEL_FILE_INFO_BUFFER_SIZE;
     let mut kernel_file_info_buffer = [0; KERNEL_FILE_INFO_BUFFER_SIZE];
     let _ = log_and_end_with_error! {
@@ -220,13 +219,13 @@ pub extern "efiapi" fn efi_main(
         output_string_cout!(cout, b"Allocate pool for kernel file content\r\n".to_iter_str(IterStrFormat::none()))
     }
     let kernel_buf = log_and_end_with_error! {
-        boot_services.allocate_pool(EFI_LOADER_DATA, kernel_file_size as UnsignedIntNative)
+        boot_services.allocate_pool(EFI_LOADER_DATA, kernel_file_size as usize)
     };
 
     end_with_error! {
         output_string_cout!(cout, b"Read kernel file content\r\n".to_iter_str(IterStrFormat::none()))
     }
-    let mut kernel_file_size_in_out = kernel_file_size as UnsignedIntNative;
+    let mut kernel_file_size_in_out = kernel_file_size as usize;
     let _ = log_and_end_with_error! {
         kernel_file.read(&mut kernel_file_size_in_out, kernel_buf)
     };
@@ -237,9 +236,9 @@ pub extern "efiapi" fn efi_main(
     end_with_error! {
         output_string_cout!(cout, b"Allocate pages for loading kernel\r\n".to_iter_str(IterStrFormat::none()))
     }
-    let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as UnsignedIntNative;
+    let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
     let mut kernel_base_addr = kernel_beg;
-    const PAGE_SIZE: UnsignedInt64 = 0x1000;
+    const PAGE_SIZE: u64 = 0x1000;
     let _ = log_and_end_with_error! {
         boot_services.allocate_pages(
             AllocateAddress,
@@ -286,7 +285,7 @@ pub extern "efiapi" fn efi_main(
 
     (unsafe {
         transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(
-            (*((kernel_base_addr + 24) as *const UnsignedIntNative)) as *const Void,
+            (*((kernel_base_addr + 24) as *const usize)) as *const Void,
         )
     })(&arg)
 }
@@ -302,7 +301,7 @@ macro_rules! return_with_error {
 
 fn output_string(
     cout: &EfiSimpleTextOutputProtocol,
-    elements: &mut [&mut dyn Iterator<Item = UnsignedInt8>],
+    elements: &mut [&mut dyn Iterator<Item = u8>],
 ) -> Result<(), EfiStatus> {
     let mut elements_iter = elements.iter_mut();
     let mut buf = [0; 256];
@@ -342,7 +341,7 @@ fn output_string(
 
 fn output_string_file(
     file: &EfiFileProtocol,
-    elements: &mut [&mut dyn Iterator<Item = UnsignedInt8>],
+    elements: &mut [&mut dyn Iterator<Item = u8>],
 ) -> Result<(), EfiStatus> {
     let mut elements_iter = elements.iter_mut();
     let mut buf = [0; 256];
@@ -406,14 +405,14 @@ fn copy_load_segments(elf_header: &Elf64Header) -> () {
             unsafe {
                 copy(
                     ((elf_header as *const Elf64Header) as EfiPhysicalAddress + file_offset)
-                        as *const UnsignedInt8,
-                    virtual_address as *mut UnsignedInt8,
-                    file_size as UnsignedIntNative,
+                        as *const u8,
+                    virtual_address as *mut u8,
+                    file_size as usize,
                 );
                 write_bytes(
-                    (virtual_address as EfiPhysicalAddress + file_size) as *mut UnsignedInt8,
+                    (virtual_address as EfiPhysicalAddress + file_size) as *mut u8,
                     0,
-                    remaining_size as UnsignedIntNative,
+                    remaining_size as usize,
                 )
             }
         }
@@ -448,11 +447,11 @@ fn calc_load_address_range(elf_header: &Elf64Header) -> (EfiPhysicalAddress, Efi
 }
 
 struct MemoryMap<'buffer> {
-    memory_map_buffer: &'buffer [UnsignedInt8],
-    map_size: UnsignedIntNative,
-    map_key: UnsignedIntNative,
-    descriptor_size: UnsignedIntNative,
-    _descriptor_version: UnsignedInt32,
+    memory_map_buffer: &'buffer [u8],
+    map_size: usize,
+    map_key: usize,
+    descriptor_size: usize,
+    _descriptor_version: u32,
 }
 
 #[panic_handler]

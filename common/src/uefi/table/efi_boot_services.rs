@@ -7,10 +7,9 @@ use crate::uefi::{
     constant::efi_status::EFI_SUCCESS,
     data_type::{
         basic_type::{
-            Boolean, CVariableLengthArgument, Char16, EfiAllocateType, EfiEvent, EfiGuid,
-            EfiHandle, EfiInterfaceType, EfiLocateSearchType, EfiMemoryType, EfiPhysicalAddress,
-            EfiStatus, EfiTimerDelay, EfiTpl, UnsignedInt32, UnsignedInt64, UnsignedInt8,
-            UnsignedIntNative, Void,
+            Boolean, CVariableLengthArgument, EfiAllocateType, EfiEvent, EfiGuid, EfiHandle,
+            EfiInterfaceType, EfiLocateSearchType, EfiMemoryType, EfiPhysicalAddress, EfiStatus,
+            EfiTimerDelay, EfiTpl, Void,
         },
         {
             efi_memory_descriptor::EfiMemoryDescriptor,
@@ -28,27 +27,27 @@ type EfiRestoreTpl = unsafe extern "efiapi" fn(old_tpl: EfiTpl) -> Void;
 type EfiAllocatePages = unsafe extern "efiapi" fn(
     r#type: EfiAllocateType,
     memory_type: EfiMemoryType,
-    pages: UnsignedIntNative,
+    pages: usize,
     memory_in_out: *mut EfiPhysicalAddress,
 ) -> EfiStatus;
 type EfiFreePages =
-    unsafe extern "efiapi" fn(memory: EfiPhysicalAddress, pages: UnsignedIntNative) -> EfiStatus;
+    unsafe extern "efiapi" fn(memory: EfiPhysicalAddress, pages: usize) -> EfiStatus;
 type EfiGetMemoryMap = unsafe extern "efiapi" fn(
-    memory_map_size_in_out: *mut UnsignedIntNative,
+    memory_map_size_in_out: *mut usize,
     memory_map_out: *mut EfiMemoryDescriptor,
-    map_key_out: *mut UnsignedIntNative,
-    descriptor_size_out: *mut UnsignedIntNative,
-    descriptor_version_out: *mut UnsignedInt32,
+    map_key_out: *mut usize,
+    descriptor_size_out: *mut usize,
+    descriptor_version_out: *mut u32,
 ) -> EfiStatus;
 type EfiAllocatePool = unsafe extern "efiapi" fn(
     pool_type: EfiMemoryType,
-    size: UnsignedIntNative,
+    size: usize,
     buffer_out: *mut *const Void,
 ) -> EfiStatus;
 type EfiFreePool = unsafe extern "efiapi" fn(buffer: *const Void) -> EfiStatus;
 
 type EfiCreateEvent = unsafe extern "efiapi" fn(
-    r#type: UnsignedInt32,
+    r#type: u32,
     notify_tpl: EfiTpl,
     notify_function_optional: Option<EfiEventNotify>,
     notify_context_optional: *const Void,
@@ -58,12 +57,12 @@ type EfiEventNotify = unsafe extern "efiapi" fn(event: EfiEvent, context: *const
 type EfiSetTimer = unsafe extern "efiapi" fn(
     event: EfiEvent,
     r#type: EfiTimerDelay,
-    trigger_time: UnsignedInt64,
+    trigger_time: u64,
 ) -> EfiStatus;
 type EfiWaitForEvent = unsafe extern "efiapi" fn(
-    number_of_events: UnsignedIntNative,
+    number_of_events: usize,
     event: *const EfiEvent,
-    index_out: *mut UnsignedIntNative,
+    index_out: *mut usize,
 ) -> EfiStatus;
 type EfiSignalEvent = unsafe extern "efiapi" fn(event: EfiEvent) -> EfiStatus;
 type EfiCloseEvent = unsafe extern "efiapi" fn(event: EfiEvent) -> EfiStatus;
@@ -100,7 +99,7 @@ type EfiLocateHandle = unsafe extern "efiapi" fn(
     search_type: EfiLocateSearchType,
     protocol_opttional: *const EfiGuid,
     search_key_optional: *const Void,
-    buffer_size_out: *mut UnsignedIntNative,
+    buffer_size_out: *mut usize,
     buffer_out: *mut EfiHandle,
 ) -> EfiStatus;
 type EfiLocateDevicePath = unsafe extern "efiapi" fn(
@@ -116,32 +115,31 @@ type EfiImageLoad = unsafe extern "efiapi" fn(
     parent_image_handle: EfiHandle,
     device_path_optional: *const EfiDevicePathProtocol,
     source_buffer_optional: *const Void,
-    source_size: UnsignedIntNative,
+    source_size: usize,
     image_handle_out: *mut EfiHandle,
 ) -> EfiStatus;
 type EfiImageStart = unsafe extern "efiapi" fn(
     image_handle: EfiHandle,
-    exit_data_size_out: *mut UnsignedIntNative,
-    exit_data_out_optional: *mut *const Char16,
+    exit_data_size_out: *mut usize,
+    exit_data_out_optional: *mut *const u16,
 ) -> EfiStatus;
 type EfiExit = unsafe extern "efiapi" fn(
     image_handle: EfiHandle,
     exit_status: EfiStatus,
-    exit_data_size: UnsignedIntNative,
-    exit_data_optional: *const Char16,
+    exit_data_size: usize,
+    exit_data_optional: *const u16,
 ) -> EfiStatus;
 type EfiImageUnload = unsafe extern "efiapi" fn(image_handle: EfiHandle) -> EfiStatus;
 type EfiExitBootServices =
-    unsafe extern "efiapi" fn(image_handle: EfiHandle, map_key: UnsignedIntNative) -> EfiStatus;
+    unsafe extern "efiapi" fn(image_handle: EfiHandle, map_key: usize) -> EfiStatus;
 
-type EfiGetNextMonotonicCount =
-    unsafe extern "efiapi" fn(count_out: *mut UnsignedInt64) -> EfiStatus;
-type EfiStall = unsafe extern "efiapi" fn(microseconds: UnsignedIntNative) -> EfiStatus;
+type EfiGetNextMonotonicCount = unsafe extern "efiapi" fn(count_out: *mut u64) -> EfiStatus;
+type EfiStall = unsafe extern "efiapi" fn(microseconds: usize) -> EfiStatus;
 type EfiSetWatchdogTimer = unsafe extern "efiapi" fn(
-    timeout: UnsignedIntNative,
-    watchdog_code: UnsignedInt64,
-    data_size: UnsignedIntNative,
-    watchdog_data_optional: *const Char16,
+    timeout: usize,
+    watchdog_code: u64,
+    data_size: usize,
+    watchdog_data_optional: *const u16,
 ) -> EfiStatus;
 
 type EfiConnectController = unsafe extern "efiapi" fn(
@@ -162,7 +160,7 @@ type EfiOpenProtocol = unsafe extern "efiapi" fn(
     interface_out_optional: *mut *const Void,
     agent_handle: EfiHandle,
     controller_handle: EfiHandle,
-    attributes: UnsignedInt32,
+    attributes: u32,
 ) -> EfiStatus;
 type EfiCloseProtocol = unsafe extern "efiapi" fn(
     handle: EfiHandle,
@@ -174,19 +172,19 @@ type EfiOpenProtocolInformation = unsafe extern "efiapi" fn(
     handle: EfiHandle,
     protocol: *const EfiGuid,
     entry_buffer_out: *mut *const EfiOpenProtocolInformationEntry,
-    entry_count_out: *mut UnsignedIntNative,
+    entry_count_out: *mut usize,
 ) -> EfiStatus;
 
 type EfiProtocolsPerHandle = unsafe extern "efiapi" fn(
     handle: EfiHandle,
     protocol_buffer_out: *mut *const *const EfiGuid,
-    protocol_buffer_count: *mut UnsignedIntNative,
+    protocol_buffer_count: *mut usize,
 ) -> EfiStatus;
 type EfiLocateHandleBuffer = unsafe extern "efiapi" fn(
     search_type: EfiLocateSearchType,
     protocol_optional: *const EfiGuid,
     search_key_optional: *const Void,
-    no_handles_out: *mut UnsignedIntNative,
+    no_handles_out: *mut usize,
     buffer_out: *mut *const EfiHandle,
 ) -> EfiStatus;
 type EfiLocateProtocol = unsafe extern "efiapi" fn(
@@ -203,22 +201,19 @@ type EfiUninstallMultipleProtocolInterfaces =
 
 type EfiCalculateCrc32 = unsafe extern "efiapi" fn(
     data: *const Void,
-    data_size: UnsignedIntNative,
-    crc32_out: *mut UnsignedInt32,
+    data_size: usize,
+    crc32_out: *mut u32,
 ) -> EfiStatus;
 
 type EfiCopyMem = unsafe extern "efiapi" fn(
     destination: *const Void,
     source: *const Void,
-    length: UnsignedIntNative,
+    length: usize,
 ) -> EfiStatus;
-type EfiSetMem = unsafe extern "efiapi" fn(
-    buffer: *const Void,
-    size: UnsignedIntNative,
-    value: UnsignedInt8,
-) -> EfiStatus;
+type EfiSetMem =
+    unsafe extern "efiapi" fn(buffer: *const Void, size: usize, value: u8) -> EfiStatus;
 type EfiCreateEventEx = unsafe extern "efiapi" fn(
-    r#type: UnsignedInt32,
+    r#type: u32,
     notify_tpl: EfiTpl,
     notify_function_optional: Option<EfiEventNotify>,
     notify_context_optional: *const Void,
@@ -293,7 +288,7 @@ impl EfiBootServices {
         &self,
         r#type: EfiAllocateType,
         memory_type: EfiMemoryType,
-        pages: UnsignedIntNative,
+        pages: usize,
         memory_in_out: &mut EfiPhysicalAddress,
     ) -> Result<(), EfiStatus> {
         let status = unsafe { (self.allocate_pages)(r#type, memory_type, pages, memory_in_out) };
@@ -305,9 +300,9 @@ impl EfiBootServices {
 
     pub fn get_memory_map(
         &self,
-        memory_map_size_in_out: &mut UnsignedIntNative,
-        memory_map_out: &mut [UnsignedInt8],
-    ) -> Result<(UnsignedIntNative, UnsignedIntNative, UnsignedInt32), EfiStatus> {
+        memory_map_size_in_out: &mut usize,
+        memory_map_out: &mut [u8],
+    ) -> Result<(usize, usize, u32), EfiStatus> {
         let mut map_key_out = 0;
         let mut descriptor_size_out = 0;
         let mut descriptor_version_out = 0;
@@ -328,18 +323,16 @@ impl EfiBootServices {
     pub fn allocate_pool(
         &self,
         pool_type: EfiMemoryType,
-        size: UnsignedIntNative,
-    ) -> Result<&mut [UnsignedInt8], EfiStatus> {
+        size: usize,
+    ) -> Result<&mut [u8], EfiStatus> {
         let mut buffer = null();
         let status = unsafe { (self.allocate_pool)(pool_type, size, &mut buffer) };
         match status {
-            EFI_SUCCESS => {
-                Ok(unsafe { slice::from_raw_parts_mut(buffer as *mut UnsignedInt8, size) })
-            }
+            EFI_SUCCESS => Ok(unsafe { slice::from_raw_parts_mut(buffer as *mut u8, size) }),
             v => Err(v),
         }
     }
-    pub fn free_pool(&self, buffer: &[UnsignedInt8]) -> Result<(), EfiStatus> {
+    pub fn free_pool(&self, buffer: &[u8]) -> Result<(), EfiStatus> {
         let status = unsafe { (self.free_pool)(buffer.as_ptr() as *const Void) };
         match status {
             EFI_SUCCESS => Ok(()),
@@ -352,7 +345,7 @@ impl EfiBootServices {
         search_type: EfiLocateSearchType,
         protocol_optional: Option<&EfiGuid>,
         search_key_optional: Option<&Void>,
-    ) -> Result<(UnsignedIntNative, &[EfiHandle]), EfiStatus> {
+    ) -> Result<(usize, &[EfiHandle]), EfiStatus> {
         let mut no_handles = 0;
         let mut buffer = null();
         let status = unsafe {
@@ -381,7 +374,7 @@ impl EfiBootServices {
     pub fn exit_boot_services(
         &self,
         image_handle: EfiHandle,
-        map_key: UnsignedIntNative,
+        map_key: usize,
     ) -> Result<(), EfiStatus> {
         let status = unsafe { (self.exit_boot_services)(image_handle, map_key) };
         match status {
@@ -397,7 +390,7 @@ impl EfiBootServices {
         interface_optional: Option<()>,
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
-        attributes: UnsignedInt32,
+        attributes: u32,
     ) -> Result<Option<&T>, EfiStatus> {
         match interface_optional {
             Some(()) => {

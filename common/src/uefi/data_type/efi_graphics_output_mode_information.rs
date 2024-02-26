@@ -1,29 +1,27 @@
-use super::basic_type::{EfiGraphicsPixelFormat, UnsignedInt32};
-
-use super::efi_pixel_bitmask::EfiPixelBitmask;
+use super::{basic_type::EfiGraphicsPixelFormat, efi_pixel_bitmask::EfiPixelBitmask};
 
 #[repr(C)]
 pub struct EfiGraphicsOutputModeInformation {
-    version: UnsignedInt32,
-    horizontal_resolution: UnsignedInt32,
-    vertical_resolution: UnsignedInt32,
+    version: u32,
+    horizontal_resolution: u32,
+    vertical_resolution: u32,
     pixel_format: EfiGraphicsPixelFormat,
     pixel_information: EfiPixelBitmask,
-    pixels_per_scan_line: UnsignedInt32,
+    pixels_per_scan_line: u32,
 }
 
 impl EfiGraphicsOutputModeInformation {
-    pub fn horizontal_resolution(&self) -> UnsignedInt32 {
+    pub fn horizontal_resolution(&self) -> u32 {
         self.horizontal_resolution
     }
-    pub fn vertical_resolution(&self) -> UnsignedInt32 {
+    pub fn vertical_resolution(&self) -> u32 {
         self.vertical_resolution
     }
     pub fn pixel_format(&self) -> EfiGraphicsPixelFormat {
         self.pixel_format
     }
 
-    pub fn pixels_per_scan_line(&self) -> UnsignedInt32 {
+    pub fn pixels_per_scan_line(&self) -> u32 {
         self.pixels_per_scan_line
     }
 }

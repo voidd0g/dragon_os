@@ -1,5 +1,5 @@
 use crate::uefi::{
-    data_type::basic_type::{Char16, EfiHandle, UnsignedInt32, UnsignedIntNative},
+    data_type::basic_type::EfiHandle,
     protocol::{
         efi_simple_text_input_protocol::EfiSimpleTextInputProtocol,
         efi_simple_text_output_protocol::EfiSimpleTextOutputProtocol,
@@ -16,8 +16,8 @@ use super::{
 #[repr(C)]
 pub struct EfiSystemTable {
     hdr: EfiTableHeader,
-    firmware_vendor: *const Char16,
-    firmware_revision: UnsignedInt32,
+    firmware_vendor: *const u16,
+    firmware_revision: u32,
     console_in_handle: EfiHandle,
     con_in: *const EfiSimpleTextInputProtocol,
     console_out_handle: EfiHandle,
@@ -26,7 +26,7 @@ pub struct EfiSystemTable {
     std_err: *const EfiSimpleTextOutputProtocol,
     runtime_services: *const EfiRuntimeServices,
     boot_services: *const EfiBootServices,
-    number_of_table_entries: UnsignedIntNative,
+    number_of_table_entries: usize,
     econfiguration_table: *const EfiConfigurationTable,
 }
 

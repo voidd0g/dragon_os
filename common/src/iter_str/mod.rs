@@ -1,9 +1,7 @@
 pub mod unsigned_integer;
 
-use crate::uefi::data_type::basic_type::{UnsignedInt8, UnsignedIntNative};
-
 pub trait ToIterStr {
-    fn to_iter_str(&self, formatter: IterStrFormat) -> impl Iterator<Item = UnsignedInt8>;
+    fn to_iter_str(&self, formatter: IterStrFormat) -> impl Iterator<Item = u8>;
 }
 
 #[derive(Clone, Copy)]
@@ -43,17 +41,17 @@ impl IterStrFormat {
 }
 
 #[derive(Clone, Copy)]
-pub struct Padding(UnsignedInt8, UnsignedIntNative);
+pub struct Padding(u8, usize);
 impl Padding {
-    pub const fn new(letter: UnsignedInt8, count: UnsignedIntNative) -> Self {
+    pub const fn new(letter: u8, count: usize) -> Self {
         Self(letter, count)
     }
 
-    pub fn get_padding_letter(&self) -> UnsignedInt8 {
+    pub fn get_padding_letter(&self) -> u8 {
         self.0
     }
 
-    pub fn get_padding_length(&self) -> UnsignedIntNative {
+    pub fn get_padding_length(&self) -> usize {
         self.1
     }
 }
@@ -67,7 +65,7 @@ pub enum Radix {
 }
 
 impl Radix {
-    pub const fn get_header(&self) -> &'static [UnsignedInt8] {
+    pub const fn get_header(&self) -> &'static [u8] {
         match self {
             Radix::Hexadecimal => b"0x",
             Radix::Decimal => b"",
@@ -76,7 +74,7 @@ impl Radix {
         }
     }
 
-    pub const fn get_value(&self) -> UnsignedInt8 {
+    pub const fn get_value(&self) -> u8 {
         match self {
             Radix::Hexadecimal => 16,
             Radix::Decimal => 10,
@@ -86,14 +84,14 @@ impl Radix {
     }
 }
 
-impl ToIterStr for &[UnsignedInt8] {
-    fn to_iter_str(&self, _: IterStrFormat) -> impl Iterator<Item = UnsignedInt8> {
+impl ToIterStr for &[u8] {
+    fn to_iter_str(&self, _: IterStrFormat) -> impl Iterator<Item = u8> {
         self.iter().map(|v| *v)
     }
 }
 
-impl<const N: usize> ToIterStr for [UnsignedInt8; N] {
-    fn to_iter_str(&self, _: IterStrFormat) -> impl Iterator<Item = UnsignedInt8> {
+impl<const N: usize> ToIterStr for [u8; N] {
+    fn to_iter_str(&self, _: IterStrFormat) -> impl Iterator<Item = u8> {
         self.iter().map(|v| *v)
     }
 }

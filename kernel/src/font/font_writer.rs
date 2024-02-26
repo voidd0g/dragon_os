@@ -1,7 +1,5 @@
 use core::slice::Iter;
 
-use common::uefi::data_type::basic_type::{Char8, UnsignedInt32, UnsignedInt8, UnsignedIntNative};
-
 use crate::{
     pixel_writer::{pixel_color::PixelColor, PixelLineWriter, PixelWriter},
     util::vector2::Vector2,
@@ -11,13 +9,13 @@ use super::font::get_font_data;
 
 pub struct FontWriter {
     color: PixelColor,
-    pos: Vector2<UnsignedInt32>,
-    font_iter: Iter<'static, UnsignedInt8>,
-    index: UnsignedIntNative,
+    pos: Vector2<u32>,
+    font_iter: Iter<'static, u8>,
+    index: usize,
 }
 
 impl FontWriter {
-    pub fn new(color: PixelColor, pos: Vector2<UnsignedInt32>, ch: Char8) -> Self {
+    pub fn new(color: PixelColor, pos: Vector2<u32>, ch: u8) -> Self {
         Self {
             color,
             pos,
@@ -28,17 +26,14 @@ impl FontWriter {
 }
 
 impl Iterator for FontWriter {
-    type Item = (FontWriterLine, Vector2<UnsignedIntNative>);
+    type Item = (FontWriterLine, Vector2<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.font_iter.next() {
             Some(v) => {
                 let ret = (
                     FontWriterLine::new(self.color, *v),
-                    Vector2::new(
-                        self.pos.x() as UnsignedIntNative,
-                        self.pos.y() as UnsignedIntNative + self.index,
-                    ),
+                    Vector2::new(self.pos.x() as usize, self.pos.y() as usize + self.index),
                 );
                 self.index += 1;
                 Some(ret)
@@ -52,12 +47,12 @@ impl PixelWriter<FontWriterLine> for FontWriter {}
 
 pub struct FontWriterLine {
     color: PixelColor,
-    value: UnsignedInt8,
-    index: UnsignedIntNative,
+    value: u8,
+    index: usize,
 }
 
 impl FontWriterLine {
-    pub const fn new(color: PixelColor, value: UnsignedInt8) -> Self {
+    pub const fn new(color: PixelColor, value: u8) -> Self {
         Self {
             color,
             value,
@@ -70,7 +65,7 @@ impl Iterator for FontWriterLine {
     type Item = Option<PixelColor>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < UnsignedInt8::BITS as UnsignedIntNative {
+        if self.index < u8::BITS as usize {
             let ret = if ((self.value << self.index) & 0x80) == 0 {
                 None
             } else {
@@ -86,5 +81,5 @@ impl Iterator for FontWriterLine {
 
 impl PixelLineWriter for FontWriterLine {}
 
-pub const FONT_WIDTH: UnsignedInt32 = 8;
-pub const FONT_HEIGHT: UnsignedInt32 = 16;
+pub const FONT_WIDTH: u32 = 8;
+pub const FONT_HEIGHT: u32 = 16;
