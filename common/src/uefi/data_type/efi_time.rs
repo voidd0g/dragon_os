@@ -283,12 +283,51 @@ impl EfiTime {
 impl Eq for EfiTime {}
 impl PartialEq for EfiTime {
     fn eq(&self, other: &Self) -> bool {
-        self.year == other.year
-            && self.month == other.month
-            && self.day == other.day
-            && self.hour == other.hour
-            && self.minute == other.minute
-            && self.second == other.second
-            && self.nanosecond == other.nanosecond
+        let ln = self.normalize_time();
+        let rn = other.normalize_time();
+        ln.year == rn.year
+            && ln.month == rn.month
+            && ln.day == rn.day
+            && ln.hour == rn.hour
+            && ln.minute == rn.minute
+            && ln.second == rn.second
+            && ln.nanosecond == rn.nanosecond
+    }
+}
+
+impl Ord for EfiTime {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl PartialOrd for EfiTime {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        let ln = self.normalize_time();
+        let rn = other.normalize_time();
+        match ln.year.partial_cmp(&rn.year) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match ln.month.partial_cmp(&rn.month) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match ln.day.partial_cmp(&rn.day) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match ln.hour.partial_cmp(&rn.hour) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match ln.minute.partial_cmp(&rn.minute) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match ln.second.partial_cmp(&rn.second) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        ln.nanosecond.partial_cmp(&rn.nanosecond)
     }
 }

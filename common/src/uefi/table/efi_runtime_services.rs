@@ -1,9 +1,14 @@
-use crate::uefi::data_type::{
-    basic_type::{Boolean, EfiGuid, EfiPhysicalAddress, EfiResetType, EfiStatus, Void},
-    efi_capsule_header::EfiCapsuleHeader,
-    efi_memory_descriptor::EfiMemoryDescriptor,
-    efi_time::EfiTime,
-    efi_time_capabilities::EfiTimeCapabilities,
+use core::ptr::null_mut;
+
+use crate::uefi::{
+    constant::efi_status::EFI_SUCCESS,
+    data_type::{
+        basic_type::{Boolean, EfiGuid, EfiPhysicalAddress, EfiResetType, EfiStatus, Void},
+        efi_capsule_header::EfiCapsuleHeader,
+        efi_memory_descriptor::EfiMemoryDescriptor,
+        efi_time::EfiTime,
+        efi_time_capabilities::EfiTimeCapabilities,
+    },
 };
 
 use super::efi_table_header::EfiTableHeader;
@@ -95,4 +100,33 @@ pub struct EfiRuntimeServices {
     query_capsule_capabilities: EfiQueryCapsuleCapabilities,
 
     query_variable_info: EfiQueryVariableInfo,
+}
+
+impl EfiRuntimeServices {
+    pub fn get_time(
+        &self,
+        capabilities_optional: Option<()>,
+    ) -> Result<(EfiTime, Option<EfiTimeCapabilities>), EfiStatus> {
+        let mut time = EfiTime::new(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        let mut capabilities = EfiTimeCapabilities::new(0, 0, 0);
+        let status = unsafe {
+            (self.get_time)(
+                &mut time,
+                match capabilities_optional {
+                    Some(()) => &mut capabilities,
+                    None => null_mut(),
+                },
+            )
+        };
+        match status {
+            EFI_SUCCESS => Ok((
+                time,
+                match capabilities_optional {
+                    Some(()) => Some(capabilities),
+                    None => None,
+                },
+            )),
+            v => Err(v),
+        }
+    }
 }

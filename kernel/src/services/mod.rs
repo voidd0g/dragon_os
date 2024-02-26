@@ -35,6 +35,10 @@ impl<'a> Services<'a> {
     pub fn draw_services(&self) -> &DrawServices {
         &self.draw_services
     }
+
+    pub fn time_services(&self) -> &TimeServices {
+        &self.time_services
+    }
 }
 
 pub struct TimeServices<'a> {
@@ -46,7 +50,23 @@ impl<'a> TimeServices<'a> {
         Self { runtime_services }
     }
 
-    pub fn wait_for_milli_seconds(milli_seconds: u32) -> () {}
+    pub fn wait_for_nano_seconds(&self, nano_seconds: u32) -> Result<(), ()> {
+        let wait_for = match self.runtime_services.get_time(None) {
+            Ok((cur_time, _)) => cur_time,
+            Err(_) => return Err(()),
+        }
+        .add_nanosecond(nano_seconds);
+        'a: loop {
+            if wait_for
+                > match self.runtime_services.get_time(None) {
+                    Ok((cur_time, _)) => cur_time,
+                    Err(_) => return Err(()),
+                }
+            {
+                break 'a Ok(());
+            }
+        }
+    }
 }
 
 pub struct DrawServices<'a> {
