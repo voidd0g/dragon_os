@@ -282,7 +282,7 @@ pub extern "efiapi" fn efi_main(
         graphic_info.vertical_resolution(),
         graphic_info.pixel_format(),
     );
-    let arg = Argument::new(&frame_buffer_config);
+    let arg = Argument::new(&frame_buffer_config, system_table.runtime_services());
 
     (unsafe {
         transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(

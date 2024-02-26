@@ -7,8 +7,8 @@ use crate::uefi::{
 };
 
 use super::{
-    efi_boot_services::EfiBootServices, efi_configuration_table::EFI_CONFIGURATION_TABLE,
-    efi_runtime_services::EFI_RUNTIME_SERVICES, efi_table_header::EfiTableHeader,
+    efi_boot_services::EfiBootServices, efi_configuration_table::EfiConfigurationTable,
+    efi_runtime_services::EfiRuntimeServices, efi_table_header::EfiTableHeader,
 };
 
 /// Documentation is on:
@@ -24,10 +24,10 @@ pub struct EfiSystemTable {
     con_out: *const EfiSimpleTextOutputProtocol,
     standard_error_handle: EfiHandle,
     std_err: *const EfiSimpleTextOutputProtocol,
-    runtime_services: *const EFI_RUNTIME_SERVICES,
+    runtime_services: *const EfiRuntimeServices,
     boot_services: *const EfiBootServices,
     number_of_table_entries: UnsignedIntNative,
-    econfiguration_table: *const EFI_CONFIGURATION_TABLE,
+    econfiguration_table: *const EfiConfigurationTable,
 }
 
 impl EfiSystemTable {
@@ -37,5 +37,9 @@ impl EfiSystemTable {
 
     pub fn boot_services(&self) -> &EfiBootServices {
         unsafe { &*self.boot_services }
+    }
+
+    pub fn runtime_services(&self) -> &EfiRuntimeServices {
+        unsafe { &*self.runtime_services }
     }
 }

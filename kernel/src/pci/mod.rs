@@ -1,7 +1,9 @@
+pub mod xhci;
+
 use core::arch::asm;
 
 use common::uefi::data_type::basic_type::{
-    UnsignedInt16, UnsignedInt32, UnsignedInt8, UnsignedIntNative,
+    UnsignedInt16, UnsignedInt32, UnsignedInt64, UnsignedInt8, UnsignedIntNative,
 };
 
 use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
@@ -90,6 +92,58 @@ fn read_bus_numbers(
     write_config_address(make_pci_config_address(bus, device, function, 0x18));
     read_config_data()
 }
+fn read_base_address_register0(
+    bus: UnsignedInt8,
+    device: UnsignedInt8,
+    function: UnsignedInt8,
+) -> UnsignedInt64 {
+    write_config_address(make_pci_config_address(bus, device, function, 0x10));
+    let lo = read_config_data();
+
+    if lo & 0x0000_0006 == 0 {
+        (lo as UnsignedInt64) & 0xFFFF_FFFF_FFFF_FFF0
+    } else {
+        write_config_address(make_pci_config_address(bus, device, function, 0x14));
+        let hi = read_config_data();
+        (lo as UnsignedInt64 + ((hi as UnsignedInt64) << 32)) & 0xFFFF_FFFF_FFFF_FFF0
+    }
+}
+fn read_xusb2_port_routing_mask(
+    bus: UnsignedInt8,
+    device: UnsignedInt8,
+    function: UnsignedInt8,
+) -> UnsignedInt32 {
+    write_config_address(make_pci_config_address(bus, device, function, 0xD4));
+    read_config_data()
+}
+fn read_usb3_port_routing_mask(
+    bus: UnsignedInt8,
+    device: UnsignedInt8,
+    function: UnsignedInt8,
+) -> UnsignedInt32 {
+    write_config_address(make_pci_config_address(bus, device, function, 0xDC));
+    read_config_data()
+}
+
+fn write_xusb2_port_routing(
+    bus: UnsignedInt8,
+    device: UnsignedInt8,
+    function: UnsignedInt8,
+    value: UnsignedInt32,
+) {
+    write_config_address(make_pci_config_address(bus, device, function, 0xD0));
+    write_config_data(value)
+}
+fn write_usb3_port_super_speed_enable(
+    bus: UnsignedInt8,
+    device: UnsignedInt8,
+    function: UnsignedInt8,
+    value: UnsignedInt32,
+) {
+    write_config_address(make_pci_config_address(bus, device, function, 0xD8));
+    write_config_data(value)
+}
+
 fn is_single_function_device(header_type: UnsignedInt8) -> bool {
     (header_type & 0x80) == 0
 }
@@ -105,7 +159,7 @@ const DEVICE_COUNT: UnsignedInt8 = 32;
 impl BusScanner {
     pub const fn new() -> Self {
         Self {
-            devices_found: [PciDevice::new(0, 0, 0, 0, [0; 4], 0); 32],
+            devices_found: [PciDevice::new(0, 0, 0, 0, PciDevieClassCodes::new(0, 0, 0, 0), 0); 32],
             devices_count: 0,
         }
     }
@@ -137,7 +191,7 @@ impl BusScanner {
                     };
                 }
             }
-            return Err(())
+            return Err(());
         }
         Ok(())
     }
@@ -219,7 +273,7 @@ impl BusScanner {
                     device,
                     function,
                     vendor_id,
-                    [base_class, sub_class, interface, revision_id],
+                    PciDevieClassCodes::new(base_class, sub_class, interface, revision_id),
                     header_type,
                 );
                 self.devices_count += 1;
@@ -236,7 +290,7 @@ pub struct PciDevice {
     device: UnsignedInt8,
     function: UnsignedInt8,
     vendor_id: UnsignedInt16,
-    class_codes: [UnsignedInt8; 4],
+    class_codes: PciDevieClassCodes,
     header_type: UnsignedInt8,
 }
 
@@ -246,7 +300,7 @@ impl PciDevice {
         device: UnsignedInt8,
         function: UnsignedInt8,
         vendor_id: UnsignedInt16,
-        class_codes: [UnsignedInt8; 4],
+        class_codes: PciDevieClassCodes,
         header_type: UnsignedInt8,
     ) -> Self {
         Self {
@@ -271,10 +325,65 @@ impl PciDevice {
     pub fn vendor_id(&self) -> UnsignedInt16 {
         self.vendor_id
     }
-    pub fn class_codes(&self) -> [UnsignedInt8; 4] {
+    pub fn class_codes(&self) -> PciDevieClassCodes {
         self.class_codes
     }
     pub fn header_type(&self) -> UnsignedInt8 {
         self.header_type
+    }
+
+    pub fn base_address_register0(&self) -> UnsignedInt64 {
+        read_base_address_register0(self.bus, self.device, self.function)
+    }
+
+    pub fn enable_super_speed(&self) {
+        write_usb3_port_super_speed_enable(
+            self.bus,
+            self.device,
+            self.function,
+            read_usb3_port_routing_mask(self.bus, self.device, self.function),
+        )
+    }
+    pub fn switch_ehci_to_xhci(&self) {
+        write_xusb2_port_routing(
+            self.bus,
+            self.device,
+            self.function,
+            read_xusb2_port_routing_mask(self.bus, self.device, self.function),
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct PciDevieClassCodes {
+    base_class: UnsignedInt8,
+    sub_class: UnsignedInt8,
+    interface: UnsignedInt8,
+    revision_id: UnsignedInt8,
+}
+
+impl PciDevieClassCodes {
+    pub const fn new(
+        base_class: UnsignedInt8,
+        sub_class: UnsignedInt8,
+        interface: UnsignedInt8,
+        revision_id: UnsignedInt8,
+    ) -> Self {
+        Self {
+            base_class,
+            sub_class,
+            interface,
+            revision_id,
+        }
+    }
+
+    pub fn base_class(&self) -> UnsignedInt8 {
+        self.base_class
+    }
+    pub fn sub_class(&self) -> UnsignedInt8 {
+        self.sub_class
+    }
+    pub fn interface(&self) -> UnsignedInt8 {
+        self.interface
     }
 }

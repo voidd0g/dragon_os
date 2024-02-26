@@ -1,4 +1,5 @@
 pub mod basic_type;
+pub mod efi_capsule_header;
 pub mod efi_file_info;
 pub mod efi_file_io_token;
 pub mod efi_graphics_output_blt_pixel;
@@ -11,4 +12,5 @@ pub mod efi_memory_descriptor;
 pub mod efi_open_protocol_information_entry;
 pub mod efi_pixel_bitmask;
 pub mod efi_time;
+pub mod efi_time_capabilities;
 pub mod simple_text_output_mode;

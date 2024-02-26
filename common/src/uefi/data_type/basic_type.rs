@@ -46,6 +46,8 @@ pub type EfiGraphicsPixelFormat = UnsignedInt32;
 
 pub type EfiGraphicsOutputBltOperation = UnsignedInt32;
 
+pub type EfiResetType = UnsignedInt32;
+
 #[repr(C)]
 pub struct EfiGuid {
     data1: UnsignedInt32,

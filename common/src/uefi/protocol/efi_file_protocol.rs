@@ -167,20 +167,23 @@ impl EfiFileProtocol {
             v => Err(v),
         }
     }
-    pub fn set_info(&self, information_type: &EfiGuid,
+    pub fn set_info(
+        &self,
+        information_type: &EfiGuid,
         buffer_size: UnsignedIntNative,
-        buffer: &[UnsignedInt8],) -> Result<(), EfiStatus> {
-            let status = unsafe {
-                (self.set_info)(
-                    self,
-                    information_type,
-                    buffer_size,
-                    buffer.as_ptr() as *const Void,
-                )
-            };
-            match status {
-                EFI_SUCCESS => Ok(()),
-                v => Err(v),
-            }
+        buffer: &[UnsignedInt8],
+    ) -> Result<(), EfiStatus> {
+        let status = unsafe {
+            (self.set_info)(
+                self,
+                information_type,
+                buffer_size,
+                buffer.as_ptr() as *const Void,
+            )
+        };
+        match status {
+            EFI_SUCCESS => Ok(()),
+            v => Err(v),
         }
+    }
 }
