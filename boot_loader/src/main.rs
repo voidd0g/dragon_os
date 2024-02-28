@@ -11,6 +11,7 @@ use common::{
         elf64_program_header::Elf64ProgramHeader,
     },
     iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
+    memory_map::MemoryMap,
     uefi::{
         constant::{
             efi_allocate_type::AllocateAddress,
@@ -25,9 +26,7 @@ use common::{
             },
         },
         data_type::{
-            basic_type::{
-                EfiHandle, EfiPhysicalAddress, EfiStatus, Void,
-            },
+            basic_type::{EfiHandle, EfiPhysicalAddress, EfiStatus, Void},
             efi_file_info::EfiFileInfo,
             efi_memory_descriptor::EfiMemoryDescriptor,
         },
@@ -176,13 +175,6 @@ pub extern "efiapi" fn efi_main(
     };
 
     end_with_error! {
-        output_string_cout!(cout, b"Free memmap buffer\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let _ = log_and_end_with_error! {
-        boot_services.free_pool(memmap.memory_map_buffer)
-    };
-
-    end_with_error! {
         output_string_cout!(cout, b"Get gop\r\n".to_iter_str(IterStrFormat::none()))
     }
     let gop = log_and_end_with_error! {
@@ -268,7 +260,7 @@ pub extern "efiapi" fn efi_main(
     };
 
     let _ = log_and_end_with_error! {
-        boot_services.exit_boot_services(image_handle, memmap.map_key)
+        boot_services.exit_boot_services(image_handle, memmap.map_key())
     };
 
     let graphic_mode = gop.mode();
@@ -281,7 +273,7 @@ pub extern "efiapi" fn efi_main(
         graphic_info.vertical_resolution(),
         graphic_info.pixel_format(),
     );
-    let arg = Argument::new(&frame_buffer_config, system_table.runtime_services());
+    let arg = Argument::new(&frame_buffer_config, system_table.runtime_services(), &memmap);
 
     (unsafe {
         transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(
@@ -446,14 +438,6 @@ fn calc_load_address_range(elf_header: &Elf64Header) -> (EfiPhysicalAddress, Efi
     (beg, end)
 }
 
-struct MemoryMap<'buffer> {
-    memory_map_buffer: &'buffer [u8],
-    map_size: usize,
-    map_key: usize,
-    descriptor_size: usize,
-    _descriptor_version: u32,
-}
-
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
     loop {
@@ -522,7 +506,7 @@ fn open_gop<'a>(
     Ok(gop)
 }
 
-fn get_memory_map<'a>(boot_services: &'a EfiBootServices) -> Result<MemoryMap<'a>, EfiStatus> {
+fn get_memory_map<'a>(boot_services: &'a EfiBootServices) -> Result<MemoryMap, EfiStatus> {
     let mut empty_buf = [];
     let mut memmap_size_needed = 0;
     let _ = match boot_services.get_memory_map(&mut memmap_size_needed, &mut empty_buf) {
@@ -541,13 +525,13 @@ fn get_memory_map<'a>(boot_services: &'a EfiBootServices) -> Result<MemoryMap<'a
     let (map_key, descriptor_size, descriptor_version) = return_with_error! {
         boot_services.get_memory_map(&mut memmap_size, memmap_buf)
     };
-    Ok(MemoryMap {
-        memory_map_buffer: memmap_buf,
-        map_size: memmap_size,
+    Ok(MemoryMap::new(
+        memmap_buf.as_ptr() as *const Void,
+        memmap_size,
         map_key,
         descriptor_size,
-        _descriptor_version: descriptor_version,
-    })
+        descriptor_version,
+    ))
 }
 
 fn open_root_dir<'a>(
@@ -624,49 +608,41 @@ fn save_memory_map(
         output_string_file!(file, b"Index,       Type,      PhysicalStart,      NumberOfPages,          Attribute\n".to_iter_str(IterStrFormat::none()))
     };
 
-    let mut descriptor_start = 0;
     let mut i = 0usize;
-
     'a: loop {
-        if descriptor_start + memmap.descriptor_size > memmap.map_size {
-            break 'a Ok(());
+        match memmap.get_nth(i) {
+            Some(descriptor) => {
+                let _ = return_with_error! {
+                    output_string_file!(file,
+                        i.to_iter_str(IterStrFormat::new(Some(Radix::Decimal), Some(false), Some(Padding::new(b' ', 5)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.r#type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.physical_start().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.attribute().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        b"\n".to_iter_str(IterStrFormat::none())
+                    )
+                };
+                let _ = return_with_error! {
+                    output_string_cout!(cout,
+                        i.to_iter_str(IterStrFormat::new(Some(Radix::Decimal), Some(false), Some(Padding::new(b' ', 5)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.r#type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.physical_start().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        b", ".to_iter_str(IterStrFormat::none()),
+                        descriptor.attribute().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        b"\r\n".to_iter_str(IterStrFormat::none())
+                    )
+                };
+            }
+            None => break 'a Ok(()),
         }
-        let descriptor = unsafe {
-            (memmap.memory_map_buffer[descriptor_start..].as_ptr() as *const EfiMemoryDescriptor)
-                .as_ref()
-        }
-        .unwrap();
-
-        let _ = return_with_error! {
-            output_string_file!(file,
-                i.to_iter_str(IterStrFormat::new(Some(Radix::Decimal), Some(false), Some(Padding::new(b' ', 5)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.r#type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.physical_start().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.number_of_pages().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.attribute().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                b"\n".to_iter_str(IterStrFormat::none())
-            )
-        };
-        let _ = return_with_error! {
-            output_string_cout!(cout,
-                i.to_iter_str(IterStrFormat::new(Some(Radix::Decimal), Some(false), Some(Padding::new(b' ', 5)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.r#type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.physical_start().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.number_of_pages().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                b", ".to_iter_str(IterStrFormat::none()),
-                descriptor.attribute().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                b"\r\n".to_iter_str(IterStrFormat::none())
-            )
-        };
-
-        descriptor_start += memmap.descriptor_size;
         i += 1;
     }
 }

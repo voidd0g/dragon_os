@@ -1,23 +1,30 @@
 use core::slice;
 
-use crate::uefi::{
-    data_type::basic_type::EfiGraphicsPixelFormat, table::efi_runtime_services::EfiRuntimeServices,
+use crate::{
+    memory_map::MemoryMap,
+    uefi::{
+        data_type::basic_type::EfiGraphicsPixelFormat,
+        table::efi_runtime_services::EfiRuntimeServices,
+    },
 };
 
 #[repr(C)]
 pub struct Argument {
     frame_buffer_config: *const FrameBufferConfig,
     runtime_services: *const EfiRuntimeServices,
+    memory_map: *const MemoryMap,
 }
 
 impl Argument {
     pub fn new(
         frame_buffer_config: *const FrameBufferConfig,
         runtime_services: *const EfiRuntimeServices,
+        memory_map: *const MemoryMap,
     ) -> Self {
         Self {
             frame_buffer_config,
             runtime_services,
+            memory_map,
         }
     }
 
@@ -27,6 +34,10 @@ impl Argument {
 
     pub fn runtime_services(&self) -> &EfiRuntimeServices {
         unsafe { self.runtime_services.as_ref() }.unwrap()
+    }
+
+    pub fn memory_map(&self) -> &MemoryMap {
+        unsafe { self.memory_map.as_ref() }.unwrap()
     }
 }
 

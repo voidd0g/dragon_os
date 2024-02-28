@@ -6,6 +6,7 @@ mod interrupt;
 mod pci;
 mod pixel_writer;
 mod pointer;
+mod queue;
 mod services;
 mod util;
 
@@ -16,6 +17,7 @@ use common::{
     iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
 };
 use font::font_writer::FONT_HEIGHT;
+use interrupt::pop_interrupt_queue;
 
 use crate::{
     interrupt::get_interrupt_descriptor_table,
@@ -91,6 +93,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         Err(()) => end(),
     };
     height += FONT_HEIGHT;
+    height %= frame_buffer_config.vertical_resolution();
 
     for device in bus_scanner.devices_found() {
         let class_codes = device.class_codes();
@@ -141,6 +144,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
             Err(()) => end(),
         };
         height += FONT_HEIGHT;
+        height %= frame_buffer_config.vertical_resolution();
     }
 
     match output_string!(
@@ -153,6 +157,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         Err(()) => end(),
     };
     height += FONT_HEIGHT;
+    height %= frame_buffer_config.vertical_resolution();
 
     const XHCI_BASE_CLASS: u8 = 0x0C;
     const XHCI_SUB_CLASS: u8 = 0x03;
@@ -203,6 +208,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         Err(()) => end(),
     };
     height += FONT_HEIGHT;
+    height %= frame_buffer_config.vertical_resolution();
 
     if xhci_found.vendor_id() == INTEL_VENDOR_ID {
         const EHCI_BASE_CLASS: u8 = 0x0C;
@@ -244,6 +250,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         Err(()) => end(),
     };
     height += FONT_HEIGHT;
+    height %= frame_buffer_config.vertical_resolution();
 
     let xhc_device = XhcDevice::new(xhci_mmio_base);
 
@@ -276,7 +283,44 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         }
     }
 
-    end()
+    loop {
+        unsafe {
+            asm!("cli");
+        }
+        let popped = pop_interrupt_queue();
+        match popped {
+            Some(v) => {
+                unsafe {
+                    asm!("sti");
+                }
+                match v {
+                    interrupt::InterruptMessage::XhciInterrupt => {
+                        match output_string!(
+                            services,
+                            PixelColor::new(128, 0, 0),
+                            Vector2::new(0, height),
+                            [
+                                b"xHCI MMIO base address is ".to_iter_str(IterStrFormat::none()),
+                                xhci_mmio_base.to_iter_str(IterStrFormat::new(
+                                    Some(Radix::Hexadecimal),
+                                    Some(true),
+                                    Some(Padding::new(b'0', 16))
+                                )),
+                            ]
+                        ) {
+                            Ok(()) => (),
+                            Err(()) => end(),
+                        };
+                        height += FONT_HEIGHT;
+                        height %= frame_buffer_config.vertical_resolution();
+                    }
+                }
+            }
+            None => unsafe {
+                asm!("sti", "hlt");
+            },
+        }
+    }
 }
 
 fn end() -> ! {

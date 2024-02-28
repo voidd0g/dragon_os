@@ -3,6 +3,8 @@ use core::{
     ptr::addr_of_mut,
 };
 
+use crate::queue::Queue;
+
 use self::interrupt_descriptor::InterruptDescriptor;
 
 pub mod interrupt_descriptor;
@@ -78,4 +80,28 @@ fn get_cs() -> u16 {
     let ret: u64;
     unsafe { asm!("xor eax, eax", "mov ax, cs", out("eax") ret) }
     ret as u16
+}
+
+pub enum InterruptMessage {
+    XhciInterrupt,
+}
+
+const QUEUE_BUF_INIT_VAL: Option<InterruptMessage> = None;
+const QUEUE_BUF_SIZE: usize = 256;
+static mut QUEUE_BUF: [Option<InterruptMessage>; QUEUE_BUF_SIZE] =
+    [QUEUE_BUF_INIT_VAL; QUEUE_BUF_SIZE];
+static mut INTERRUPT_QUEUE: Queue<InterruptMessage> =
+    Queue::new(unsafe { QUEUE_BUF.as_mut_ptr() }, QUEUE_BUF_SIZE);
+
+pub fn push_interrupt_queue(interrupt_message: InterruptMessage) -> Result<(), ()> {
+    unsafe { INTERRUPT_QUEUE.push(interrupt_message) }
+}
+pub fn front_interrupt_queue() -> &'static Option<InterruptMessage> {
+    unsafe { INTERRUPT_QUEUE.front() }
+}
+pub fn pop_interrupt_queue() -> Option<InterruptMessage> {
+    unsafe { INTERRUPT_QUEUE.pop() }
+}
+pub fn count_interrupt_queue() -> usize {
+    unsafe { INTERRUPT_QUEUE.count() }
 }

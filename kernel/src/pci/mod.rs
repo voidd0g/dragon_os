@@ -8,6 +8,8 @@ use core::arch::asm;
 
 use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
 
+use self::pci_capability_id::PCI_CAPABILITY_ID_MSI;
+
 fn make_pci_config_address(bus: u8, device: u8, function: u8, register_address: u8) -> u32 {
     const ENABLE_BIT_SHL: u32 = 31;
     const ENABLE_BIT_MASK: u32 = 0x8000_0000;
@@ -105,6 +107,22 @@ fn read_usb3_port_routing_mask(bus: u8, device: u8, function: u8) -> u32 {
     read_config_data()
 }
 
+fn write_capabilities_register(
+    bus: u8,
+    device: u8,
+    function: u8,
+    poinetr: u8,
+    offset: u8,
+    value: u32,
+) {
+    write_config_address(make_pci_config_address(
+        bus,
+        device,
+        function,
+        poinetr + offset,
+    ));
+    write_config_data(value)
+}
 fn write_xusb2_port_routing(bus: u8, device: u8, function: u8, value: u32) {
     write_config_address(make_pci_config_address(bus, device, function, 0xD0));
     write_config_data(value)
@@ -310,12 +328,81 @@ impl PciDevice {
         (first_line.0, first_line.1)
     }
 
+    fn configure_msi_register(
+        &self,
+        address: u8,
+        message_address: u32,
+        message_data: u16,
+        num_vector_exponent: u16,
+    ) {
+        let (header, message_control) = get_unsigned_int_16s(read_capabilities_register(
+            self.bus,
+            self.device,
+            self.function,
+            address,
+            0x00,
+        ));
+        let is_64_bit = message_control & 0x80 != 0;
+        let multiple_message_capable = (message_control >> 1) & 0x07;
+        write_capabilities_register(
+            self.bus,
+            self.device,
+            self.function,
+            address,
+            0x00,
+            header as u32
+                + (((message_control & 0xFF_8E)
+                    + ((if multiple_message_capable < num_vector_exponent {
+                        multiple_message_capable
+                    } else {
+                        num_vector_exponent
+                    } & 0x07)
+                        << 4)
+                    + 1) as u32)
+                << u16::BITS,
+        );
+        write_capabilities_register(
+            self.bus,
+            self.device,
+            self.function,
+            address,
+            0x04,
+            message_address,
+        );
+        write_capabilities_register(
+            self.bus,
+            self.device,
+            self.function,
+            address,
+            if is_64_bit { 0x0C } else { 0x08 },
+            message_data as u32,
+        );
+    }
+
     pub fn configure_msi(
         &self,
         message_address: u32,
-        message_data: u32,
-        num_vector_exponent: u32,
+        message_data: u16,
+        num_vector_exponent: u16,
     ) -> Result<(), ()> {
+        let mut capability_address =
+            read_capabilities_pointer(self.bus, self.device, self.function);
+        'a: loop {
+            let (id, nxt) = self.capability_id_and_next_pointer(capability_address);
+            if id == PCI_CAPABILITY_ID_MSI {
+                self.configure_msi_register(
+                    capability_address,
+                    message_address,
+                    message_data,
+                    num_vector_exponent,
+                );
+                break 'a Ok(());
+            }
+            if nxt == 0 {
+                break 'a Err(());
+            }
+            capability_address = nxt;
+        }
     }
 
     pub fn configure_msi_fixed_destination(
@@ -325,7 +412,7 @@ impl PciDevice {
         level_for_trigger_mode_is_assert: bool,
         delivery_mode: u8,
         vector: u8,
-        num_vector_exponent: u32,
+        num_vector_exponent: u16,
     ) -> Result<(), ()> {
         let message_address = 0xFEE0_0000 + ((apic_id as u32) << 12);
         let message_data = (if trigger_mode_is_edge { 1 } else { 0 } << 15)
@@ -334,8 +421,8 @@ impl PciDevice {
             } else {
                 0
             } << 15)
-            + (((delivery_mode & 0x07) as u32) << 8)
-            + vector as u32;
+            + (((delivery_mode & 0x07) as u16) << 8)
+            + vector as u16;
         self.configure_msi(message_address, message_data, num_vector_exponent)
     }
 
