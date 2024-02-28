@@ -1,3 +1,7 @@
+pub mod local_apic;
+pub mod msi_delivery_mode;
+pub mod msi_trigger_mode;
+pub mod pci_capability_id;
 pub mod xhci;
 
 use core::arch::asm;
@@ -78,6 +82,19 @@ fn read_base_address_register0(bus: u8, device: u8, function: u8) -> u64 {
         let hi = read_config_data();
         (lo as u64 + ((hi as u64) << 32)) & 0xFFFF_FFFF_FFFF_FFF0
     }
+}
+fn read_capabilities_pointer(bus: u8, device: u8, function: u8) -> u8 {
+    write_config_address(make_pci_config_address(bus, device, function, 0x34));
+    get_unsigned_int_8s(read_config_data()).0
+}
+fn read_capabilities_register(bus: u8, device: u8, function: u8, poinetr: u8, offset: u8) -> u32 {
+    write_config_address(make_pci_config_address(
+        bus,
+        device,
+        function,
+        poinetr + offset,
+    ));
+    read_config_data()
 }
 fn read_xusb2_port_routing_mask(bus: u8, device: u8, function: u8) -> u32 {
     write_config_address(make_pci_config_address(bus, device, function, 0xD4));
@@ -276,6 +293,50 @@ impl PciDevice {
 
     pub fn base_address_register0(&self) -> u64 {
         read_base_address_register0(self.bus, self.device, self.function)
+    }
+
+    pub fn capability_pointer(&self) -> u8 {
+        read_capabilities_pointer(self.bus, self.device, self.function)
+    }
+
+    pub fn capability_id_and_next_pointer(&self, pointer: u8) -> (u8, u8) {
+        let first_line = get_unsigned_int_8s(read_capabilities_register(
+            self.bus,
+            self.device,
+            self.function,
+            pointer,
+            0x00,
+        ));
+        (first_line.0, first_line.1)
+    }
+
+    pub fn configure_msi(
+        &self,
+        message_address: u32,
+        message_data: u32,
+        num_vector_exponent: u32,
+    ) -> Result<(), ()> {
+    }
+
+    pub fn configure_msi_fixed_destination(
+        &self,
+        apic_id: u8,
+        trigger_mode_is_edge: bool,
+        level_for_trigger_mode_is_assert: bool,
+        delivery_mode: u8,
+        vector: u8,
+        num_vector_exponent: u32,
+    ) -> Result<(), ()> {
+        let message_address = 0xFEE0_0000 + ((apic_id as u32) << 12);
+        let message_data = (if trigger_mode_is_edge { 1 } else { 0 } << 15)
+            + (if level_for_trigger_mode_is_assert {
+                1
+            } else {
+                0
+            } << 15)
+            + (((delivery_mode & 0x07) as u32) << 8)
+            + vector as u32;
+        self.configure_msi(message_address, message_data, num_vector_exponent)
     }
 
     pub fn enable_super_speed(&self) {

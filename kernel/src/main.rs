@@ -2,6 +2,7 @@
 #![no_main]
 
 mod font;
+mod interrupt;
 mod pci;
 mod pixel_writer;
 mod pointer;
@@ -17,6 +18,7 @@ use common::{
 use font::font_writer::FONT_HEIGHT;
 
 use crate::{
+    interrupt::get_interrupt_descriptor_table,
     pci::{xhci::XhcDevice, BusScanner},
     pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor},
     pointer::PointerWriter,
@@ -221,6 +223,8 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
         }
     }
 
+    get_interrupt_descriptor_table().load();
+
     let xhci_mmio_base = xhci_found.base_address_register0();
 
     match output_string!(
@@ -255,17 +259,6 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
             end()
         }
     }
-
-    match output_string!(
-        services,
-        PixelColor::new(128, 0, 0),
-        Vector2::new(0, height),
-        [b"Successfully initialized xHC device.".to_iter_str(IterStrFormat::none())]
-    ) {
-        Ok(()) => (),
-        Err(()) => end(),
-    };
-    height += FONT_HEIGHT;
 
     match services
         .draw_services()

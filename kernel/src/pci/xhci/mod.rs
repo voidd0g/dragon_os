@@ -92,8 +92,18 @@ impl XhcDevice {
             Err(()) => return Err(()),
         }
         *height += FONT_HEIGHT;
-        let max_device_slots = get_bits_value(self.capability_registers.host_controller_structural_parameters_1(), 0, 7) as u8;
-        self.operational_registers.set_number_of_device_slots_enabled(if max_device_slots < MAX_DEVICE_SLOTS_DESIRED { max_device_slots } else { MAX_DEVICE_SLOTS_DESIRED });
+        let max_device_slots = get_bits_value(
+            self.capability_registers
+                .host_controller_structural_parameters_1(),
+            0,
+            7,
+        ) as u8;
+        self.operational_registers
+            .set_number_of_device_slots_enabled(if max_device_slots < MAX_DEVICE_SLOTS_DESIRED {
+                max_device_slots
+            } else {
+                MAX_DEVICE_SLOTS_DESIRED
+            });
 
         match output_string!(
             services,
@@ -120,17 +130,17 @@ struct DeviceContextBaseAddressArray {
     device_context_base_address_array: [u64; MAX_DEVICE_SLOTS_DESIRED as usize + 1],
 }
 
-#[repr(align(64))]
-enum DeviceContextArray {
-    DeviceContextArray32([DeviceContext<32>; MAX_DEVICE_SLOTS_DESIRED as usize + 1]),
-    DeviceContextArray64([DeviceContext<64>; MAX_DEVICE_SLOTS_DESIRED as usize + 1]),
-}
+// #[repr(align(64))]
+// enum DeviceContextArray {
+//     DeviceContextArray32([DeviceContext<32>; MAX_DEVICE_SLOTS_DESIRED as usize + 1]),
+//     DeviceContextArray64([DeviceContext<64>; MAX_DEVICE_SLOTS_DESIRED as usize + 1]),
+// }
 
-#[repr(C)]
-struct DeviceContext<const CONTEXT_SIZE: usize> {
-    slot_context: SlotContext<CONTEXT_SIZE>,
-    endpoint_contexts: [EndpointContext<CONTEXT_SIZE>; 31],
-}
+// #[repr(C)]
+// struct DeviceContext<const CONTEXT_SIZE: usize> {
+//     slot_context: SlotContext<CONTEXT_SIZE>,
+//     endpoint_contexts: [EndpointContext<CONTEXT_SIZE>; 31],
+// }
 
 pub struct XhcCapabilityRegisters {
     base_address: u64,
@@ -181,7 +191,7 @@ impl XhcOperationalRegisters {
         let configure_register = self.configure_register();
         *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
             (configure_register & 0xFF_FF_FF_00) + number as u32;
-    } 
+    }
 
     pub fn usb_command(&self) -> u32 {
         unsafe { ((self.base_address + 0x00) as *const u32).read() }
