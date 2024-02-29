@@ -28,7 +28,6 @@ use common::{
         data_type::{
             basic_type::{EfiHandle, EfiPhysicalAddress, EfiStatus, Void},
             efi_file_info::EfiFileInfo,
-            efi_memory_descriptor::EfiMemoryDescriptor,
         },
         protocol::{
             efi_file_protocol::EfiFileProtocol,
@@ -53,7 +52,14 @@ fn ascii_to_utf16_literal<const N: usize>(ascii: &[u8; N]) -> [u16; N] {
 }
 
 macro_rules! output_string_cout {
-    ( $cout:ident, $( $x:expr ),* ) => {
+    ( $cout:ident, [$( $x:expr ),*] ) => {
+        output_string($cout, &mut [
+            $(
+                &mut $x,
+            )*
+        ])
+    };
+    ( $cout:ident, [$( $x:expr, )*] ) => {
         output_string($cout, &mut [
             $(
                 &mut $x,
@@ -62,7 +68,14 @@ macro_rules! output_string_cout {
     };
 }
 macro_rules! output_string_file {
-    ( $file:ident, $( $x:expr ),* ) => {
+    ( $file:ident, [$( $x:expr ),*] ) => {
+        output_string_file($file, &mut [
+            $(
+                &mut $x,
+            )*
+        ])
+    };
+    ( $file:ident, [$( $x:expr, )*] ) => {
         output_string_file($file, &mut [
             $(
                 &mut $x,
@@ -80,187 +93,487 @@ pub extern "efiapi" fn efi_main(
     let cout = system_table.con_out();
     let boot_services = system_table.boot_services();
 
-    macro_rules! end_with_error {
-        ( $e:expr ) => {{
-            let _ = match $e {
+    let _ = match cout.reset(false) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Hello World!.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get memory map.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let memmap = match get_memory_map(boot_services) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
                 Ok(res) => res,
                 Err(_) => end(),
             };
-        }};
-    }
-
-    macro_rules! log_and_end_with_error {
-        ( $e:expr ) => {
-            {
-                match $e {
-                    Ok(res) => res,
-                    Err(v) => {
-                        end_with_error! {
-                            output_string_cout!(
-                                cout,
-                                b"Error: ".to_iter_str(IterStrFormat::none()),
-                                v.to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8))))
-                            )
-                        }
-                        end()
-                    },
-                }
-            }
-        };
-    }
-
-    end_with_error! {
-        cout.reset(false)
-    }
-
-    end_with_error! {
-        output_string_cout!(cout, b"Hello World!\r\n".to_iter_str(IterStrFormat::none()))
-    }
-
-    end_with_error! {
-        output_string_cout!(cout, b"Get memory map\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let memmap = log_and_end_with_error! {
-        get_memory_map(boot_services)
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Open root dir\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let root_dir = log_and_end_with_error! {
-        open_root_dir(image_handle, boot_services, cout)
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open root dir.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let root_dir = match open_root_dir(image_handle, boot_services, cout) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Open memmap file\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open memmap file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
     const MEMMAP_FILE_NAME: &[u8; 11] = b"memmap.txt\0";
-    let memmap_file = log_and_end_with_error! {
-        root_dir.open(
-            &ascii_to_utf16_literal(MEMMAP_FILE_NAME),
-            EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
-            0,
-        )
+    let memmap_file = match root_dir.open(
+        &ascii_to_utf16_literal(MEMMAP_FILE_NAME),
+        EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
+        0,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Get memmap file info\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get memmap file info.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
     const MEMMAP_FILE_INFO_BUFFER_SIZE: usize =
         size_of::<EfiFileInfo>() + size_of::<u16>() * MEMMAP_FILE_NAME.len();
     let mut memmap_file_info_buffer_size = MEMMAP_FILE_INFO_BUFFER_SIZE;
     let mut memmap_file_info_buffer = [0; MEMMAP_FILE_INFO_BUFFER_SIZE];
-    let _ = log_and_end_with_error! {
-        memmap_file.get_info(
-            &EFI_FILE_INFO_GUID,
-            &mut memmap_file_info_buffer_size,
-            &mut memmap_file_info_buffer,
-        )
+    let _ = match memmap_file.get_info(
+        &EFI_FILE_INFO_GUID,
+        &mut memmap_file_info_buffer_size,
+        &mut memmap_file_info_buffer,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
     let memmap_file_info =
         unsafe { (memmap_file_info_buffer.as_ptr() as *mut EfiFileInfo).as_mut() }.unwrap();
 
-    end_with_error! {
-        output_string_cout!(cout, b"Save memmap to file\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let _ = log_and_end_with_error! {
-        save_memory_map(&memmap, memmap_file, cout)
+    let _ = match output_string_cout!(
+        cout,
+        [b"Save memmap to file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match save_memory_map(&memmap, memmap_file, cout) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Close memmap file\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let _ = log_and_end_with_error! {
-        memmap_file.close()
+    let _ = match output_string_cout!(
+        cout,
+        [b"Close memmap file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match memmap_file.close() {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Get gop\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let gop = log_and_end_with_error! {
-        open_gop(image_handle, boot_services, cout)
+    let _ = match output_string_cout!(cout, [b"Get gop.\r\n".to_iter_str(IterStrFormat::none())]) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let gop = match open_gop(image_handle, boot_services, cout) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Open kernel file\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open kernel file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
     const KERNEL_FILE_NAME: &[u8; 11] = b"KERNEL.ELF\0";
-    let kernel_file = log_and_end_with_error! {
-        root_dir.open(&ascii_to_utf16_literal(KERNEL_FILE_NAME), EFI_FILE_MODE_READ, 0)
+    let kernel_file = match root_dir.open(
+        &ascii_to_utf16_literal(KERNEL_FILE_NAME),
+        EFI_FILE_MODE_READ,
+        0,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Get kernel file info\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get kernel file info.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
     const KERNEL_FILE_INFO_BUFFER_SIZE: usize =
         size_of::<EfiFileInfo>() + size_of::<u16>() * KERNEL_FILE_NAME.len();
     let mut kernel_file_info_buffer_size = KERNEL_FILE_INFO_BUFFER_SIZE;
     let mut kernel_file_info_buffer = [0; KERNEL_FILE_INFO_BUFFER_SIZE];
-    let _ = log_and_end_with_error! {
-        kernel_file.get_info(
-            &EFI_FILE_INFO_GUID,
-            &mut kernel_file_info_buffer_size,
-            &mut kernel_file_info_buffer,
-        )
+    let _ = match kernel_file.get_info(
+        &EFI_FILE_INFO_GUID,
+        &mut kernel_file_info_buffer_size,
+        &mut kernel_file_info_buffer,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
     let kernel_file_info =
         unsafe { (kernel_file_info_buffer.as_ptr() as *const EfiFileInfo).as_ref() }.unwrap();
     let kernel_file_size = kernel_file_info.file_size();
 
-    end_with_error! {
-        output_string_cout!(cout, b"Allocate pool for kernel file content\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let kernel_buf = log_and_end_with_error! {
-        boot_services.allocate_pool(EFI_LOADER_DATA, kernel_file_size as usize)
+    let _ = match output_string_cout!(
+        cout,
+        [b"Allocate pool for kernel file content.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let kernel_buf = match boot_services.allocate_pool(EFI_LOADER_DATA, kernel_file_size as usize) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Read kernel file content\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Read kernel file content.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
     let mut kernel_file_size_in_out = kernel_file_size as usize;
-    let _ = log_and_end_with_error! {
-        kernel_file.read(&mut kernel_file_size_in_out, kernel_buf)
+    let _ = match kernel_file.read(&mut kernel_file_size_in_out, kernel_buf) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
     let kernel_elf_header =
         unsafe { (kernel_buf.as_ptr() as *const Elf64Header).as_ref() }.unwrap();
-    let (kernel_beg, kernel_end) = calc_load_address_range(kernel_elf_header);
+    let (kernel_beg, kernel_end) = calc_load_address_range(kernel_elf_header, cout);
 
-    end_with_error! {
-        output_string_cout!(cout, b"Allocate pages for loading kernel\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Allocate pages for loading kernel.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    const PAGE_SIZE: u64 = 0x1000;
     let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
     let mut kernel_base_addr = kernel_beg;
-    const PAGE_SIZE: u64 = 0x1000;
-    let _ = log_and_end_with_error! {
-        boot_services.allocate_pages(
-            AllocateAddress,
-            EFI_LOADER_DATA,
-            page_num,
-            &mut kernel_base_addr,
-        )
+    let _ = match output_string_cout!(
+        cout,
+        [page_num.to_iter_str(IterStrFormat::none()),
+        b" pages will be allocated.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match boot_services.allocate_pages(
+        AllocateAddress,
+        EFI_LOADER_DATA,
+        page_num,
+        &mut kernel_base_addr,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Copy content to pages allocated\r\n".to_iter_str(IterStrFormat::none()))
-    }
+    let _ = match output_string_cout!(
+        cout,
+        [b"Copy content to pages allocated.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
     copy_load_segments(kernel_elf_header);
 
-    end_with_error! {
-        output_string_cout!(cout, b"Free pool for kernel file content\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let _ = log_and_end_with_error! {
-        boot_services.free_pool(&kernel_buf)
+    let _ = match output_string_cout!(
+        cout,
+        [b"Free pool for kernel file content.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match boot_services.free_pool(&kernel_buf) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    end_with_error! {
-        output_string_cout!(cout, b"Get memory map\r\n".to_iter_str(IterStrFormat::none()))
-    }
-    let memmap = log_and_end_with_error! {
-        get_memory_map(boot_services)
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get memory map.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let memmap = match get_memory_map(boot_services) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
-    let _ = log_and_end_with_error! {
-        boot_services.exit_boot_services(image_handle, memmap.map_key())
+    let _ = match boot_services.exit_boot_services(image_handle, memmap.map_key()) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
     };
 
     let graphic_mode = gop.mode();
@@ -273,22 +586,17 @@ pub extern "efiapi" fn efi_main(
         graphic_info.vertical_resolution(),
         graphic_info.pixel_format(),
     );
-    let arg = Argument::new(&frame_buffer_config, system_table.runtime_services(), &memmap);
+    let arg = Argument::new(
+        &frame_buffer_config,
+        system_table.runtime_services(),
+        &memmap,
+    );
 
     (unsafe {
         transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(
             (*((kernel_base_addr + 24) as *const usize)) as *const Void,
         )
     })(&arg)
-}
-
-macro_rules! return_with_error {
-    ( $e:expr ) => {{
-        match $e {
-            Ok(res) => res,
-            Err(v) => return Err(v),
-        }
-    }};
 }
 
 fn output_string(
@@ -309,8 +617,9 @@ fn output_string(
                         buf[buf_index] = c;
                         buf_index += 1;
                         if buf_index == buf.len() - 1 {
-                            return_with_error! {
-                                cout.output_string(&buf)
+                            match cout.output_string(&buf) {
+                                Ok(res) => res,
+                                Err(v) => return Err(v),
                             };
                             buf.fill(0);
                             buf_index = 0;
@@ -321,8 +630,9 @@ fn output_string(
             },
             None => {
                 if buf_index != 0 {
-                    return_with_error! {
-                        cout.output_string(&buf[..buf_index + 1])
+                    match cout.output_string(&buf[..buf_index + 1]) {
+                        Ok(res) => res,
+                        Err(v) => return Err(v),
                     };
                 }
                 break 'a Ok(());
@@ -349,8 +659,9 @@ fn output_string_file(
                         buf_index += 1;
                         if buf_index == buf.len() {
                             let mut buffer_size = buf.len();
-                            return_with_error! {
-                                file.write(&mut buffer_size, &buf)
+                            match file.write(&mut buffer_size, &buf) {
+                                Ok(res) => res,
+                                Err(v) => return Err(v),
                             };
                             buf.fill(0);
                             buf_index = 0;
@@ -362,8 +673,9 @@ fn output_string_file(
             None => {
                 if buf_index != 0 {
                     let mut buffer_size = buf_index;
-                    return_with_error! {
-                        file.write(&mut buffer_size, &buf[..buf_index])
+                    match file.write(&mut buffer_size, &buf[..buf_index]) {
+                        Ok(res) => res,
+                        Err(v) => return Err(v),
                     };
                 }
                 break 'a Ok(());
@@ -413,7 +725,10 @@ fn copy_load_segments(elf_header: &Elf64Header) -> () {
     }
 }
 
-fn calc_load_address_range(elf_header: &Elf64Header) -> (EfiPhysicalAddress, EfiPhysicalAddress) {
+fn calc_load_address_range(
+    elf_header: &Elf64Header,
+    cout: &EfiSimpleTextOutputProtocol,
+) -> (EfiPhysicalAddress, EfiPhysicalAddress) {
     let mut beg = EfiPhysicalAddress::MAX;
     let mut end = 0;
     let mut cur_address = (elf_header as *const Elf64Header) as EfiPhysicalAddress
@@ -422,6 +737,29 @@ fn calc_load_address_range(elf_header: &Elf64Header) -> (EfiPhysicalAddress, Efi
     for _ in 0..elf_header.program_header_num() {
         let program_header =
             unsafe { (cur_address as *const Elf64ProgramHeader).as_ref() }.unwrap();
+
+        let _ = output_string_cout!(
+            cout,
+            [
+                b"type: ".to_iter_str(IterStrFormat::none()),
+                program_header.r#type().to_iter_str(IterStrFormat::new(
+                    Some(Radix::Hexadecimal),
+                    None,
+                    None
+                )),
+                b", vaddr: ".to_iter_str(IterStrFormat::none()),
+                program_header
+                    .virtual_address()
+                    .to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), None, None)),
+                b", memsz: ".to_iter_str(IterStrFormat::none()),
+                program_header.memory_size().to_iter_str(IterStrFormat::new(
+                    Some(Radix::Hexadecimal),
+                    None,
+                    None
+                )),
+                b".\r\n".to_iter_str(IterStrFormat::none()),
+            ]
+        );
 
         if program_header.r#type() == ELF64_PROGRAM_TYPE_LOAD {
             let virtual_address = program_header.virtual_address() as EfiPhysicalAddress;
@@ -434,6 +772,17 @@ fn calc_load_address_range(elf_header: &Elf64Header) -> (EfiPhysicalAddress, Efi
 
         cur_address += elf_header.program_header_element_size() as EfiPhysicalAddress;
     }
+
+    let _ = output_string_cout!(
+        cout,
+        [
+            b"from: ".to_iter_str(IterStrFormat::none()),
+            beg.to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), None, None)),
+            b", to: ".to_iter_str(IterStrFormat::none()),
+            end.to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), None, None)),
+            b".\r\n".to_iter_str(IterStrFormat::none()),
+        ]
+    );
 
     (beg, end)
 }
@@ -452,56 +801,81 @@ fn open_gop<'a>(
     boot_services: &'a EfiBootServices,
     cout: &EfiSimpleTextOutputProtocol,
 ) -> Result<&'a EfiGraphicsOutputProtocol, EfiStatus> {
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Get graphics output protocol handles\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get graphics output protocol handles.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
-    let (num_gop_handles, gop_handles) = return_with_error! {
-        boot_services.locate_handle_buffer(
-            BY_PROTOCOL,
-            Some(&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID),
-            None,
-        )
+    let (num_gop_handles, gop_handles) = match boot_services.locate_handle_buffer(
+        BY_PROTOCOL,
+        Some(&EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID),
+        None,
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     if num_gop_handles < 1 {
-        let _ = return_with_error! {
-            output_string_cout!(cout, b"No graphics output protocol handles found\r\n".to_iter_str(IterStrFormat::none()))
+        let _ = match output_string_cout!(
+            cout,
+            [b"No graphics output protocol handles found.\r\n".to_iter_str(IterStrFormat::none())]
+        ) {
+            Ok(res) => res,
+            Err(v) => return Err(v),
         };
         return Err(EFI_ABORTED);
     }
 
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Get graphics output protocol with handle[0]\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get graphics output protocol with handle[0].\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
-    let gop = return_with_error! {
-        boot_services.open_protocol(
-            *gop_handles.iter().nth(0).unwrap(),
-            &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
-            Some(()),
-            image_handle,
-            image_handle,
-            EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-        )
+    let gop = match boot_services.open_protocol(
+        *gop_handles.iter().nth(0).unwrap(),
+        &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
+        Some(()),
+        image_handle,
+        image_handle,
+        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     let gop = match gop {
         Some(gop) => gop,
         None => {
-            let _ = return_with_error! {
-                output_string_cout!(cout, b"Failed to get graphics output protocol with handle[0]\r\n".to_iter_str(IterStrFormat::none()))
+            let _ = match output_string_cout!(
+                cout,
+                [b"Failed to get graphics output protocol with handle[0].\r\n"
+                    .to_iter_str(IterStrFormat::none())]
+            ) {
+                Ok(res) => res,
+                Err(v) => return Err(v),
             };
             return Err(EFI_ABORTED);
         }
     };
 
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Free graphics output protocol with handles buffer\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [b"Free graphics output protocol with handles buffer.\r\n"
+            .to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
-    let _ = return_with_error! {
-        boot_services.free_pool(unsafe {
-            slice::from_raw_parts(
-                gop_handles.as_ptr() as *const u8,
-                gop_handles.len() * size_of::<EfiHandle>(),
-            )
-        })
+    let _ = match boot_services.free_pool(unsafe {
+        slice::from_raw_parts(
+            gop_handles.as_ptr() as *const u8,
+            gop_handles.len() * size_of::<EfiHandle>(),
+        )
+    }) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     Ok(gop)
 }
@@ -518,13 +892,16 @@ fn get_memory_map<'a>(boot_services: &'a EfiBootServices) -> Result<MemoryMap, E
     memmap_size_needed /= 8;
     memmap_size_needed *= 8;
 
-    let memmap_buf = return_with_error! {
-        boot_services.allocate_pool(EFI_LOADER_DATA, memmap_size_needed)
+    let memmap_buf = match boot_services.allocate_pool(EFI_LOADER_DATA, memmap_size_needed) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     let mut memmap_size = memmap_size_needed;
-    let (map_key, descriptor_size, descriptor_version) = return_with_error! {
-        boot_services.get_memory_map(&mut memmap_size, memmap_buf)
-    };
+    let (map_key, descriptor_size, descriptor_version) =
+        match boot_services.get_memory_map(&mut memmap_size, memmap_buf) {
+            Ok(res) => res,
+            Err(v) => return Err(v),
+        };
     Ok(MemoryMap::new(
         memmap_buf.as_ptr() as *const Void,
         memmap_size,
@@ -539,54 +916,77 @@ fn open_root_dir<'a>(
     boot_services: &'a EfiBootServices,
     cout: &EfiSimpleTextOutputProtocol,
 ) -> Result<&'a EfiFileProtocol, EfiStatus> {
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Open loaded image protocol\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open loaded image protocol.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
-    let loaded_image = return_with_error! {
-        boot_services.open_protocol::<EfiLoadedImageProtocol>(
-            image_handle,
-            &EFI_LOADED_IMAGE_PROTOCOL_GUID,
-            Some(()),
-            image_handle,
-            image_handle,
-            EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-        )
+    let loaded_image = match boot_services.open_protocol::<EfiLoadedImageProtocol>(
+        image_handle,
+        &EFI_LOADED_IMAGE_PROTOCOL_GUID,
+        Some(()),
+        image_handle,
+        image_handle,
+        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     let loaded_image = match loaded_image {
         Some(loaded_image) => loaded_image,
         None => {
-            let _ = return_with_error! {
-                output_string_cout!(cout, b"Failed to get loaded image protocol\r\n".to_iter_str(IterStrFormat::none()))
+            let _ = match output_string_cout!(
+                cout,
+                [b"Failed to get loaded image protocol.\r\n".to_iter_str(IterStrFormat::none())]
+            ) {
+                Ok(res) => res,
+                Err(v) => return Err(v),
             };
             return Err(EFI_ABORTED);
         }
     };
 
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Open simple file system protocol\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open simple file system protocol.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
-    let fs = return_with_error! {
-            boot_services.open_protocol::<EfiSimpleFileSystemProtocol>(
-            loaded_image.device_handle(),
-            &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
-            Some(()),
-            image_handle,
-            image_handle,
-            EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-        )
+    let fs = match boot_services.open_protocol::<EfiSimpleFileSystemProtocol>(
+        loaded_image.device_handle(),
+        &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+        Some(()),
+        image_handle,
+        image_handle,
+        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     let fs = match fs {
         Some(fs) => fs,
         None => {
-            let _ = return_with_error! {
-                output_string_cout!(cout, b"Failed to get simple file system protocol\r\n".to_iter_str(IterStrFormat::none()))
+            let _ = match output_string_cout!(
+                cout,
+                [b"Failed to get simple file system protocol.\r\n"
+                    .to_iter_str(IterStrFormat::none())]
+            ) {
+                Ok(res) => res,
+                Err(v) => return Err(v),
             };
             return Err(EFI_ABORTED);
         }
     };
 
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Open volume and get root directory\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open volume and get root directory.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
     let root = match fs.open_volume() {
         Ok(root) => root,
@@ -601,44 +1001,106 @@ fn save_memory_map(
     file: &EfiFileProtocol,
     cout: &EfiSimpleTextOutputProtocol,
 ) -> Result<(), EfiStatus> {
-    let _ = return_with_error! {
-        output_string_cout!(cout, b"Index,       Type,      PhysicalStart,      NumberOfPages,          Attribute\r\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_cout!(
+        cout,
+        [
+            b"Index,       Type,      PhysicalStart,      NumberOfPages,          Attribute.\r\n"
+                .to_iter_str(IterStrFormat::none())
+        ]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
-    let _ = return_with_error! {
-        output_string_file!(file, b"Index,       Type,      PhysicalStart,      NumberOfPages,          Attribute\n".to_iter_str(IterStrFormat::none()))
+    let _ = match output_string_file!(
+        file,
+        [
+            b"Index,       Type,      PhysicalStart,      NumberOfPages,          Attribute\n"
+                .to_iter_str(IterStrFormat::none())
+        ]
+    ) {
+        Ok(res) => res,
+        Err(v) => return Err(v),
     };
 
     let mut i = 0usize;
     'a: loop {
         match memmap.get_nth(i) {
             Some(descriptor) => {
-                let _ = return_with_error! {
-                    output_string_file!(file,
-                        i.to_iter_str(IterStrFormat::new(Some(Radix::Decimal), Some(false), Some(Padding::new(b' ', 5)))),
+                let _ = match output_string_file!(
+                    file,
+                    [
+                        i.to_iter_str(IterStrFormat::new(
+                            Some(Radix::Decimal),
+                            Some(false),
+                            Some(Padding::new(b' ', 5))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.r#type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))),
+                        descriptor.r#type().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 8))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.physical_start().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        descriptor.physical_start().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.attribute().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        descriptor.attribute().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
                         b"\n".to_iter_str(IterStrFormat::none())
-                    )
+                    ]
+                ) {
+                    Ok(res) => res,
+                    Err(v) => return Err(v),
                 };
-                let _ = return_with_error! {
-                    output_string_cout!(cout,
-                        i.to_iter_str(IterStrFormat::new(Some(Radix::Decimal), Some(false), Some(Padding::new(b' ', 5)))),
+                let _ = match output_string_cout!(
+                    cout,
+                    [
+                        i.to_iter_str(IterStrFormat::new(
+                            Some(Radix::Decimal),
+                            Some(false),
+                            Some(Padding::new(b' ', 5))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.r#type().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 8)))),
+                        descriptor.r#type().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 8))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.physical_start().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        descriptor.physical_start().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
+                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
                         b", ".to_iter_str(IterStrFormat::none()),
-                        descriptor.attribute().to_iter_str(IterStrFormat::new(Some(Radix::Hexadecimal), Some(true), Some(Padding::new(b'0', 16)))),
-                        b"\r\n".to_iter_str(IterStrFormat::none())
-                    )
+                        descriptor.attribute().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
+                        b".\r\n".to_iter_str(IterStrFormat::none())
+                    ]
+                ) {
+                    Ok(res) => res,
+                    Err(v) => return Err(v),
                 };
             }
             None => break 'a Ok(()),

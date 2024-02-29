@@ -3,7 +3,7 @@ use core::{
     ptr::addr_of_mut,
 };
 
-use crate::queue::Queue;
+use crate::util::queue::Queue;
 
 use self::interrupt_descriptor::InterruptDescriptor;
 

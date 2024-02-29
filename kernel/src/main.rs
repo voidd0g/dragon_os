@@ -6,15 +6,20 @@ mod interrupt;
 mod pci;
 mod pixel_writer;
 mod pointer;
-mod queue;
 mod services;
 mod util;
 
-use core::{arch::asm, panic::PanicInfo};
+use core::{
+    arch::{asm, global_asm},
+    panic::PanicInfo,
+};
 
 use common::{
     argument::Argument,
     iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
+    uefi::constant::efi_memory_type::{
+        EFI_BOOT_SERVICES_CODE, EFI_BOOT_SERVICES_DATA, EFI_CONVENTIONAL_MEMORY,
+    },
 };
 use font::font_writer::FONT_HEIGHT;
 use interrupt::pop_interrupt_queue;
@@ -33,12 +38,34 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
     loop {}
 }
 
+global_asm!(
+    r#"
+.extern kernel_main_core
+
+.section .bss
+.global KERNEL_MAIN_STACK
+.align 16
+KERNEL_MAIN_STACK:
+    .space 0x100000
+
+.section .text
+.global kernel_main
+kernel_main:
+    mov rsp, offset KERNEL_MAIN_STACK + 0x100000
+    call kernel_main_core
+.fin:
+    hlt
+    jmp .fin
+"#
+);
+
 #[no_mangle]
-pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
+pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     let arg = unsafe { arg.as_ref() }.unwrap();
 
     let frame_buffer_config = arg.frame_buffer_config();
     let runtime_services = arg.runtime_services();
+    let memory_map = arg.memory_map();
 
     let services = Services::new(frame_buffer_config, runtime_services);
 
@@ -62,6 +89,68 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
             );
             end()
         }
+    }
+
+    const AVAILABLE_MEMORY_TYPE: [u32; 3] = [
+        EFI_BOOT_SERVICES_CODE,
+        EFI_BOOT_SERVICES_DATA,
+        EFI_CONVENTIONAL_MEMORY,
+    ];
+    let mut i = 0usize;
+    'a: loop {
+        match memory_map.get_nth(i) {
+            Some(descriptor) => {
+                match output_string!(
+                    services,
+                    PixelColor::new(128, 0, 0),
+                    Vector2::new(0, height),
+                    [
+                        i.to_iter_str(IterStrFormat::new(
+                            Some(Radix::Decimal),
+                            Some(false),
+                            Some(Padding::new(b' ', 5))
+                        )),
+                        b"-th, type: ".to_iter_str(IterStrFormat::none()),
+                        descriptor.r#type().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 8))
+                        )),
+                        b", ph_st: ".to_iter_str(IterStrFormat::none()),
+                        descriptor.physical_start().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
+                        b", no_pg: ".to_iter_str(IterStrFormat::none()),
+                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
+                        b", attr: ".to_iter_str(IterStrFormat::none()),
+                        descriptor.attribute().to_iter_str(IterStrFormat::new(
+                            Some(Radix::Hexadecimal),
+                            Some(true),
+                            Some(Padding::new(b'0', 16))
+                        )),
+                        b", avail: ".to_iter_str(IterStrFormat::none()),
+                        if AVAILABLE_MEMORY_TYPE.contains(&descriptor.r#type()) {
+                            b"t.".to_iter_str(IterStrFormat::none())
+                        } else {
+                            b"f.".to_iter_str(IterStrFormat::none())
+                        }
+                    ]
+                ) {
+                    Ok(()) => (),
+                    Err(()) => end(),
+                };
+                height += FONT_HEIGHT;
+                height %= frame_buffer_config.vertical_resolution();
+            }
+            None => break 'a (),
+        }
+        i += 1;
     }
 
     let mut bus_scanner = BusScanner::new();
@@ -138,6 +227,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
                     Some(true),
                     Some(Padding::new(b'0', 2))
                 )),
+                b".".to_iter_str(IterStrFormat::none()),
             ]
         ) {
             Ok(()) => (),
@@ -201,7 +291,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
             xhci_found.device().to_iter_str(IterStrFormat::none()),
             b".".to_iter_str(IterStrFormat::none()),
             xhci_found.function().to_iter_str(IterStrFormat::none()),
-            b" was xHC device. ".to_iter_str(IterStrFormat::none()),
+            b" was xHC device.".to_iter_str(IterStrFormat::none()),
         ]
     ) {
         Ok(()) => (),
@@ -244,6 +334,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
                 Some(true),
                 Some(Padding::new(b'0', 16))
             )),
+            b".".to_iter_str(IterStrFormat::none()),
         ]
     ) {
         Ok(()) => (),
@@ -306,6 +397,7 @@ pub extern "sysv64" fn kernel_main(arg: *const Argument) -> ! {
                                     Some(true),
                                     Some(Padding::new(b'0', 16))
                                 )),
+                                b".".to_iter_str(IterStrFormat::none()),
                             ]
                         ) {
                             Ok(()) => (),

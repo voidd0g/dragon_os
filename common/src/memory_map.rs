@@ -27,10 +27,14 @@ impl MemoryMap {
     }
 
     pub fn get_nth(&self, index: usize) -> Option<&EfiMemoryDescriptor> {
-        unsafe {
-            ((self.memory_map_buffer as usize + index * self.descriptor_size)
-                as *const EfiMemoryDescriptor)
-                .as_ref()
+        if index < self.map_size / self.descriptor_size {
+            Some(unsafe {
+                ((self.memory_map_buffer as usize + index * self.descriptor_size)
+                    as *const EfiMemoryDescriptor)
+                    .as_ref()
+            }.unwrap())
+        } else {
+            None
         }
     }
 
