@@ -8,7 +8,6 @@ use crate::util::queue::Queue;
 use self::interrupt_descriptor::InterruptDescriptor;
 
 pub mod interrupt_descriptor;
-pub mod interrupt_descriptor_type;
 pub mod interrupt_vector;
 
 static mut INTERRUPT_DESCRIPTOR_TABLE: InterruptDescriptorTable = InterruptDescriptorTable::new();

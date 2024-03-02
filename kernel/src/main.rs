@@ -6,6 +6,7 @@ mod interrupt;
 mod pci;
 mod pixel_writer;
 mod pointer;
+mod segment;
 mod services;
 mod util;
 
