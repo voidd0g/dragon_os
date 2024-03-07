@@ -105,6 +105,12 @@ impl XhcDevice {
                 MAX_DEVICE_SLOTS_DESIRED
             });
 
+        let context_size = self
+            .capability_registers
+            .host_controller_cabability_parameters_1()
+            & 0x0000_0004
+            != 0;
+
         match output_string!(
             services,
             PixelColor::new(128, 0, 0),
@@ -125,22 +131,7 @@ const USB_STATUS_CONTROLLER_NOT_REAY: u32 = 0x0000_0800;
 const USB_COMMAND_HOST_CONTROLLER_RESET_MASK: u32 = 0x0000_0002;
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
 
-#[repr(align(64))]
-struct DeviceContextBaseAddressArray {
-    device_context_base_address_array: [u64; MAX_DEVICE_SLOTS_DESIRED as usize + 1],
-}
-
-// #[repr(align(64))]
-// enum DeviceContextArray {
-//     DeviceContextArray32([DeviceContext<32>; MAX_DEVICE_SLOTS_DESIRED as usize + 1]),
-//     DeviceContextArray64([DeviceContext<64>; MAX_DEVICE_SLOTS_DESIRED as usize + 1]),
-// }
-
-// #[repr(C)]
-// struct DeviceContext<const CONTEXT_SIZE: usize> {
-//     slot_context: SlotContext<CONTEXT_SIZE>,
-//     endpoint_contexts: [EndpointContext<CONTEXT_SIZE>; 31],
-// }
+struct DeviceContexts {}
 
 pub struct XhcCapabilityRegisters {
     base_address: u64,

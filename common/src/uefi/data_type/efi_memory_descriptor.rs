@@ -26,3 +26,5 @@ impl EfiMemoryDescriptor {
         self.attribute
     }
 }
+
+pub const UEFI_PAGE_FRAME_SIZE: usize = 0x1000;

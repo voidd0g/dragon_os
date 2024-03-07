@@ -1,8 +1,11 @@
 #![no_std]
 #![no_main]
+#![feature(asm_const)]
 
 mod font;
 mod interrupt;
+mod memory_manager;
+mod paging;
 mod pci;
 mod pixel_writer;
 mod pointer;
@@ -14,6 +17,9 @@ use core::{
     arch::{asm, global_asm},
     panic::PanicInfo,
 };
+
+extern crate alloc;
+use alloc::format;
 
 use common::{
     argument::Argument,
@@ -27,9 +33,12 @@ use interrupt::pop_interrupt_queue;
 
 use crate::{
     interrupt::get_interrupt_descriptor_table,
+    memory_manager::BitmapMemoryManager,
+    paging::setup_identity_page_table_2m,
     pci::{xhci::XhcDevice, BusScanner},
     pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor},
     pointer::PointerWriter,
+    segment::setup_segments,
     services::Services,
     util::vector2::Vector2,
 };
@@ -39,25 +48,29 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
     loop {}
 }
 
+const KERNEL_MAIN_STACK_ALIGN: usize = 0x0010;
+const KERNEL_MAIN_STACK_SIZE: usize = 0x1000000;
+
 global_asm!(
     r#"
 .extern kernel_main_core
 
 .section .bss
-.global KERNEL_MAIN_STACK
-.align 16
+.align {KERNEL_MAIN_STACK_ALIGN}
 KERNEL_MAIN_STACK:
-    .space 0x100000
+    .space {KERNEL_MAIN_STACK_SIZE}
 
 .section .text
 .global kernel_main
 kernel_main:
-    mov rsp, offset KERNEL_MAIN_STACK + 0x100000
+    mov rsp, offset KERNEL_MAIN_STACK + {KERNEL_MAIN_STACK_SIZE}
     call kernel_main_core
 .fin:
     hlt
     jmp .fin
-"#
+"#,
+    KERNEL_MAIN_STACK_ALIGN = const { KERNEL_MAIN_STACK_ALIGN },
+    KERNEL_MAIN_STACK_SIZE = const { KERNEL_MAIN_STACK_SIZE }
 );
 
 #[no_mangle]
@@ -68,7 +81,14 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     let runtime_services = arg.runtime_services();
     let memory_map = arg.memory_map();
 
-    let services = Services::new(frame_buffer_config, runtime_services);
+    setup_segments();
+
+    setup_identity_page_table_2m();
+
+    let services = Services::new(
+        frame_buffer_config,
+        runtime_services,
+    );
 
     let mut height = 0;
 
@@ -90,68 +110,6 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
             );
             end()
         }
-    }
-
-    const AVAILABLE_MEMORY_TYPE: [u32; 3] = [
-        EFI_BOOT_SERVICES_CODE,
-        EFI_BOOT_SERVICES_DATA,
-        EFI_CONVENTIONAL_MEMORY,
-    ];
-    let mut i = 0usize;
-    'a: loop {
-        match memory_map.get_nth(i) {
-            Some(descriptor) => {
-                match output_string!(
-                    services,
-                    PixelColor::new(128, 0, 0),
-                    Vector2::new(0, height),
-                    [
-                        i.to_iter_str(IterStrFormat::new(
-                            Some(Radix::Decimal),
-                            Some(false),
-                            Some(Padding::new(b' ', 5))
-                        )),
-                        b"-th, type: ".to_iter_str(IterStrFormat::none()),
-                        descriptor.r#type().to_iter_str(IterStrFormat::new(
-                            Some(Radix::Hexadecimal),
-                            Some(true),
-                            Some(Padding::new(b'0', 8))
-                        )),
-                        b", ph_st: ".to_iter_str(IterStrFormat::none()),
-                        descriptor.physical_start().to_iter_str(IterStrFormat::new(
-                            Some(Radix::Hexadecimal),
-                            Some(true),
-                            Some(Padding::new(b'0', 16))
-                        )),
-                        b", no_pg: ".to_iter_str(IterStrFormat::none()),
-                        descriptor.number_of_pages().to_iter_str(IterStrFormat::new(
-                            Some(Radix::Hexadecimal),
-                            Some(true),
-                            Some(Padding::new(b'0', 16))
-                        )),
-                        b", attr: ".to_iter_str(IterStrFormat::none()),
-                        descriptor.attribute().to_iter_str(IterStrFormat::new(
-                            Some(Radix::Hexadecimal),
-                            Some(true),
-                            Some(Padding::new(b'0', 16))
-                        )),
-                        b", avail: ".to_iter_str(IterStrFormat::none()),
-                        if AVAILABLE_MEMORY_TYPE.contains(&descriptor.r#type()) {
-                            b"t.".to_iter_str(IterStrFormat::none())
-                        } else {
-                            b"f.".to_iter_str(IterStrFormat::none())
-                        }
-                    ]
-                ) {
-                    Ok(()) => (),
-                    Err(()) => end(),
-                };
-                height += FONT_HEIGHT;
-                height %= frame_buffer_config.vertical_resolution();
-            }
-            None => break 'a (),
-        }
-        i += 1;
     }
 
     let mut bus_scanner = BusScanner::new();
