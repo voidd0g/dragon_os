@@ -1,12 +1,19 @@
 pub mod local_apic;
 pub mod msi_delivery_mode;
-pub mod msi_trigger_mode;
 pub mod pci_capability_id;
 pub mod xhci;
 
 use core::arch::asm;
 
-use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
+use common::iter_str::{IterStrFormat, Padding, ToIterStr};
+
+use crate::{
+    font::font_writer::FONT_HEIGHT,
+    output_string,
+    pixel_writer::pixel_color::PixelColor,
+    services::Services,
+    util::{get_unsigned_int_16s, get_unsigned_int_8s, vector2::Vector2},
+};
 
 use self::pci_capability_id::PCI_CAPABILITY_ID_MSI;
 
@@ -69,32 +76,32 @@ fn read_class_code(bus: u8, device: u8, function: u8) -> u32 {
     write_config_address(make_pci_config_address(bus, device, function, 0x08));
     read_config_data()
 }
-fn read_bus_numbers(bus: u8, device: u8, function: u8) -> u32 {
-    write_config_address(make_pci_config_address(bus, device, function, 0x18));
-    read_config_data()
-}
 fn read_base_address_register0(bus: u8, device: u8, function: u8) -> u64 {
     write_config_address(make_pci_config_address(bus, device, function, 0x10));
     let lo = read_config_data();
 
-    if lo & 0x0000_0006 == 0 {
+    if lo & 0x0000_0004 == 0 {
         (lo as u64) & 0xFFFF_FFFF_FFFF_FFF0
     } else {
         write_config_address(make_pci_config_address(bus, device, function, 0x14));
         let hi = read_config_data();
-        (lo as u64 + ((hi as u64) << 32)) & 0xFFFF_FFFF_FFFF_FFF0
+        (lo as u64) & 0xFFFF_FFFF_FFFF_FFF0 + ((hi as u64) << 32)
     }
+}
+fn read_bus_numbers(bus: u8, device: u8, function: u8) -> u32 {
+    write_config_address(make_pci_config_address(bus, device, function, 0x18));
+    read_config_data()
 }
 fn read_capabilities_pointer(bus: u8, device: u8, function: u8) -> u8 {
     write_config_address(make_pci_config_address(bus, device, function, 0x34));
     get_unsigned_int_8s(read_config_data()).0
 }
-fn read_capabilities_register(bus: u8, device: u8, function: u8, poinetr: u8, offset: u8) -> u32 {
+fn read_capabilities_register(bus: u8, device: u8, function: u8, pointer: u8, offset: u8) -> u32 {
     write_config_address(make_pci_config_address(
         bus,
         device,
         function,
-        poinetr + offset,
+        pointer + offset,
     ));
     read_config_data()
 }
@@ -136,8 +143,9 @@ fn is_single_function_device(header_type: u8) -> bool {
     (header_type & 0x80) == 0
 }
 
+const DEVICE_FOUND_COUNT: usize = 128;
 pub struct BusScanner {
-    devices_found: [PciDevice; 32],
+    devices_found: [PciDevice; DEVICE_FOUND_COUNT],
     devices_count: usize,
 }
 
@@ -147,7 +155,8 @@ const DEVICE_COUNT: u8 = 32;
 impl BusScanner {
     pub const fn new() -> Self {
         Self {
-            devices_found: [PciDevice::new(0, 0, 0, 0, PciDevieClassCodes::new(0, 0, 0, 0), 0); 32],
+            devices_found: [PciDevice::new(0, 0, 0, 0, PciDevieClassCodes::new(0, 0, 0, 0), 0);
+                DEVICE_FOUND_COUNT],
             devices_count: 0,
         }
     }
@@ -170,7 +179,7 @@ impl BusScanner {
                 Err(v) => return Err(v),
             };
         } else {
-            for function in 1..FUNCTION_COUNT {
+            for function in 0..FUNCTION_COUNT {
                 let vendor_id = read_vendor_id(0, 0, function);
                 if vendor_id != INVALID_VENDOR_ID {
                     let _ = match self.scan_bus(function) {
@@ -179,8 +188,8 @@ impl BusScanner {
                     };
                 }
             }
-            return Err(());
         }
+
         Ok(())
     }
 
@@ -385,8 +394,7 @@ impl PciDevice {
         message_data: u16,
         num_vector_exponent: u16,
     ) -> Result<(), ()> {
-        let mut capability_address =
-            read_capabilities_pointer(self.bus, self.device, self.function);
+        let mut capability_address = self.capability_pointer();
         'a: loop {
             let (id, nxt) = self.capability_id_and_next_pointer(capability_address);
             if id == PCI_CAPABILITY_ID_MSI {
@@ -408,19 +416,13 @@ impl PciDevice {
     pub fn configure_msi_fixed_destination(
         &self,
         apic_id: u8,
-        trigger_mode_is_edge: bool,
-        level_for_trigger_mode_is_assert: bool,
+        trigger_mode_is_level: bool,
         delivery_mode: u8,
         vector: u8,
         num_vector_exponent: u16,
     ) -> Result<(), ()> {
         let message_address = 0xFEE0_0000 + ((apic_id as u32) << 12);
-        let message_data = (if trigger_mode_is_edge { 1 } else { 0 } << 15)
-            + (if level_for_trigger_mode_is_assert {
-                1
-            } else {
-                0
-            } << 15)
+        let message_data = (if trigger_mode_is_level { 1 } else { 0 } << 15)
             + (((delivery_mode & 0x07) as u16) << 8)
             + vector as u16;
         self.configure_msi(message_address, message_data, num_vector_exponent)

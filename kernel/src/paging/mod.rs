@@ -1,4 +1,7 @@
-use core::{arch::global_asm, ptr::addr_of};
+use core::{
+    arch::{asm, global_asm},
+    ptr::addr_of,
+};
 
 use self::page_size::PAGE_SIZE_2M;
 
@@ -12,14 +15,16 @@ const PAGE_DIRECTORY_COUNT: usize = 0x0040;
 
 global_asm!(
     r#"
-.extern kernel_main_core
-
 .section .bss
 .align {PAGE_TABLE_ALIGN}
 PML4_TABLE:
     .space {PML4_TABLE_ENTRY_COUNT} * 64
+
+.align {PAGE_TABLE_ALIGN}
 PDP_TABLE:
 	.space {PDP_TABLE_ENTRY_COUNT} * 64
+
+.align {PAGE_TABLE_ALIGN}
 PAGE_DIRECTORIES:
 	.space {PAGE_DIRECTORY_ENTRY_COUNT} * 64 * {PAGE_DIRECTORY_COUNT}
 	
@@ -39,10 +44,10 @@ extern "C" {
 }
 
 pub fn setup_identity_page_table_2m() {
-    unsafe { PML4_TABLE[0] = ((addr_of!(PDP_TABLE) as u64) & 0x0000_000F_FFFF_F000) + 0x0003 }
+    unsafe { PML4_TABLE[0] = pml4_table_entry(PDP_TABLE.as_ptr() as u64) }
     for i in 0..PAGE_DIRECTORY_COUNT {
         unsafe {
-            PDP_TABLE[i] = ((addr_of!(PAGE_DIRECTORIES[i]) as u64) & 0x0000_000F_FFFF_F000) + 0x0003
+            PDP_TABLE[i] = ((PAGE_DIRECTORIES[i].as_ptr() as u64) & 0x0000_000F_FFFF_F000) + 0x0003
         }
         for j in 0..PAGE_DIRECTORY_ENTRY_COUNT {
             unsafe {
@@ -53,17 +58,10 @@ pub fn setup_identity_page_table_2m() {
             }
         }
     }
-    unsafe { set_cr3(addr_of!(PML4_TABLE) as u64) }
+    let pml4_table_addr = unsafe { PML4_TABLE.as_ptr() } as u64;
+    unsafe { asm!("mov cr3, rax", in("rax") pml4_table_addr) }
 }
 
-extern "C" {
-    fn set_cr3(val: u64);
+fn pml4_table_entry(addr: u64) -> u64 {
+    (addr & 0x0000_000F_FFFF_F000) + 0x0003
 }
-
-global_asm!(
-    r#"
-set_cr3:
-    mov cr3, rdi
-    ret
-"#
-);

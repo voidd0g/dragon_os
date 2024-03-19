@@ -1,5 +1,3 @@
-pub mod slab_allocator;
-
 use common::{
     memory_map::MemoryMap,
     uefi::{

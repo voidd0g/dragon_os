@@ -7,8 +7,18 @@ use ascii_to_utf16::ascii_to_utf16;
 use common::{
     argument::{Argument, FrameBufferConfig},
     elf::{
-        constant::elf64_program_type::ELF64_PROGRAM_TYPE_LOAD, elf64_header::Elf64Header,
+        constant::{
+            elf64_program_type::{ELF64_PROGRAM_TYPE_DYNAMIC, ELF64_PROGRAM_TYPE_LOAD},
+            elf64_section_type::{
+                ELF64_SECTION_TYPE_DYNSYM, ELF64_SECTION_TYPE_REL, ELF64_SECTION_TYPE_RELA,
+            },
+        },
+        elf64_header::Elf64Header,
         elf64_program_header::Elf64ProgramHeader,
+        elf64_rel::Elf64Rel,
+        elf64_rela::Elf64Rela,
+        elf64_section_header::Elf64SectionHeader,
+        elf64_sym::Elf64Sym,
     },
     iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
     memory_map::MemoryMap,
@@ -17,7 +27,7 @@ use common::{
             efi_allocate_type::AllocateAddress,
             efi_file_mode::{EFI_FILE_MODE_CREATE, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE},
             efi_locate_search_type::BY_PROTOCOL,
-            efi_memory_type::EFI_LOADER_DATA,
+            efi_memory_type::{EFI_CONVENTIONAL_MEMORY, EFI_LOADER_DATA},
             efi_open_protocol::EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
             efi_status::{EFI_ABORTED, EFI_BUFFER_TOO_SMALL},
             guid::{
@@ -43,7 +53,7 @@ use core::{
     arch::asm,
     mem::{size_of, transmute},
     panic::PanicInfo,
-    ptr::{copy, write_bytes},
+    ptr::{copy, slice_from_raw_parts, write_bytes},
     slice,
 };
 
@@ -416,7 +426,15 @@ pub extern "efiapi" fn efi_main(
 
     let _ = match output_string_cout!(
         cout,
-        [b"Read kernel file content.\r\n".to_iter_str(IterStrFormat::none())]
+        [
+            b"Read kernel file content to ".to_iter_str(IterStrFormat::none()),
+            (kernel_buf.as_ptr() as usize).to_iter_str(IterStrFormat::new(
+                Some(Radix::Hexadecimal),
+                Some(true),
+                Some(Padding::new(b'0', 16))
+            )),
+            b".\r\n".to_iter_str(IterStrFormat::none())
+        ]
     ) {
         Ok(res) => res,
         Err(_) => end(),
@@ -455,11 +473,52 @@ pub extern "efiapi" fn efi_main(
     };
     const PAGE_SIZE: u64 = 0x1000;
     let page_num = ((kernel_end - kernel_beg + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
-    let mut kernel_base_addr = kernel_beg;
+    let offset = {
+        let mut i = 0;
+        let mut found = None;
+        let mut found_num = None;
+        'a: loop {
+            match memmap.get_nth(i) {
+                Some(memmap) => {
+                    let pages = memmap.number_of_pages();
+                    if memmap.r#type() == EFI_CONVENTIONAL_MEMORY
+                        && pages >= page_num as u64
+                        && found_num.unwrap_or(u64::MAX) > pages
+                    {
+                        found = Some(memmap.physical_start());
+                        found_num = Some(pages);
+                    }
+                }
+                None => match found {
+                    Some(found) => break 'a found,
+                    None => {
+                        let _ = match output_string_cout!(
+                            cout,
+                            [b"No enough space to load kernel.\r\n"
+                                .to_iter_str(IterStrFormat::none())]
+                        ) {
+                            Ok(res) => res,
+                            Err(_) => end(),
+                        };
+                    }
+                },
+            }
+            i += 1;
+        }
+    };
+    let mut kernel_base_addr = kernel_beg + offset;
     let _ = match output_string_cout!(
         cout,
-        [page_num.to_iter_str(IterStrFormat::none()),
-        b" pages will be allocated.\r\n".to_iter_str(IterStrFormat::none())]
+        [
+            page_num.to_iter_str(IterStrFormat::none()),
+            b" pages will be allocated from ".to_iter_str(IterStrFormat::none()),
+            kernel_base_addr.to_iter_str(IterStrFormat::new(
+                Some(Radix::Hexadecimal),
+                Some(true),
+                Some(Padding::new(b'0', 8))
+            )),
+            b".\r\n".to_iter_str(IterStrFormat::none())
+        ]
     ) {
         Ok(res) => res,
         Err(_) => end(),
@@ -497,7 +556,7 @@ pub extern "efiapi" fn efi_main(
         Ok(res) => res,
         Err(_) => end(),
     };
-    copy_load_segments(kernel_elf_header);
+    copy_load_segments(kernel_elf_header, offset as usize);
 
     let _ = match output_string_cout!(
         cout,
@@ -507,6 +566,214 @@ pub extern "efiapi" fn efi_main(
         Err(_) => end(),
     };
     let _ = match boot_services.free_pool(&kernel_buf) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Close kernel file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match kernel_file.close() {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get memory map.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let memmap = match get_memory_map(boot_services) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open root dir.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let root_dir = match open_root_dir(image_handle, boot_services, cout) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Open memmap file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let memmap_file = match root_dir.open(
+        &ascii_to_utf16_literal(MEMMAP_FILE_NAME),
+        EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
+        0,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Get memmap file info.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let mut memmap_file_info_buffer_size = MEMMAP_FILE_INFO_BUFFER_SIZE;
+    let mut memmap_file_info_buffer = [0; MEMMAP_FILE_INFO_BUFFER_SIZE];
+    let _ = match memmap_file.get_info(
+        &EFI_FILE_INFO_GUID,
+        &mut memmap_file_info_buffer_size,
+        &mut memmap_file_info_buffer,
+    ) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+    let memmap_file_info =
+        unsafe { (memmap_file_info_buffer.as_ptr() as *mut EfiFileInfo).as_mut() }.unwrap();
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Save memmap to file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match save_memory_map(&memmap, memmap_file, cout) {
+        Ok(res) => res,
+        Err(v) => {
+            let _ = match output_string_cout!(
+                cout,
+                [
+                    b"Error: ".to_iter_str(IterStrFormat::none()),
+                    v.to_iter_str(IterStrFormat::new(
+                        Some(Radix::Hexadecimal),
+                        Some(true),
+                        Some(Padding::new(b'0', 8))
+                    ))
+                ]
+            ) {
+                Ok(res) => res,
+                Err(_) => end(),
+            };
+            end()
+        }
+    };
+
+    let _ = match output_string_cout!(
+        cout,
+        [b"Close memmap file.\r\n".to_iter_str(IterStrFormat::none())]
+    ) {
+        Ok(res) => res,
+        Err(_) => end(),
+    };
+    let _ = match memmap_file.close() {
         Ok(res) => res,
         Err(v) => {
             let _ = match output_string_cout!(
@@ -594,7 +861,7 @@ pub extern "efiapi" fn efi_main(
 
     (unsafe {
         transmute::<*const Void, extern "sysv64" fn(*const Argument) -> !>(
-            (*((kernel_base_addr + 24) as *const usize)) as *const Void,
+            (*((kernel_base_addr + 24) as *const usize) + offset as usize) as *const Void,
         )
     })(&arg)
 }
@@ -692,7 +959,7 @@ fn end() -> ! {
     }
 }
 
-fn copy_load_segments(elf_header: &Elf64Header) -> () {
+fn copy_load_segments(elf_header: &Elf64Header, kernel_offset: usize) -> () {
     let mut cur_address = (elf_header as *const Elf64Header) as EfiPhysicalAddress
         + elf_header.program_header_offset();
 
@@ -700,28 +967,125 @@ fn copy_load_segments(elf_header: &Elf64Header) -> () {
         let program_header =
             unsafe { (cur_address as *const Elf64ProgramHeader).as_ref() }.unwrap();
 
-        if program_header.r#type() == ELF64_PROGRAM_TYPE_LOAD {
-            let file_size = program_header.file_size();
-            let remaining_size = program_header.memory_size() - file_size;
-            let file_offset = program_header.offset();
-            let virtual_address = program_header.virtual_address();
+        match program_header.r#type() {
+            ELF64_PROGRAM_TYPE_LOAD => {
+                let file_size = program_header.file_size();
+                let remaining_size = program_header.memory_size() - file_size;
+                let file_offset = program_header.offset();
+                let virtual_address = program_header.virtual_address() + kernel_offset;
 
-            unsafe {
-                copy(
-                    ((elf_header as *const Elf64Header) as EfiPhysicalAddress + file_offset)
-                        as *const u8,
-                    virtual_address as *mut u8,
-                    file_size as usize,
-                );
-                write_bytes(
-                    (virtual_address as EfiPhysicalAddress + file_size) as *mut u8,
-                    0,
-                    remaining_size as usize,
-                )
+                unsafe {
+                    copy(
+                        ((elf_header as *const Elf64Header) as EfiPhysicalAddress + file_offset)
+                            as *const u8,
+                        virtual_address as *mut u8,
+                        file_size as usize,
+                    );
+                    write_bytes(
+                        (virtual_address as EfiPhysicalAddress + file_size) as *mut u8,
+                        0,
+                        remaining_size as usize,
+                    )
+                }
             }
+            _ => (),
         }
 
         cur_address += elf_header.program_header_element_size() as EfiPhysicalAddress;
+    }
+
+    let mut cur_address = (elf_header as *const Elf64Header) as EfiPhysicalAddress
+        + elf_header.section_header_offset();
+    for _ in 0..elf_header.section_header_num() {
+        let section_header =
+            unsafe { (cur_address as *const Elf64SectionHeader).as_ref() }.unwrap();
+
+        match section_header.r#type() {
+            ELF64_SECTION_TYPE_DYNSYM => {
+                let symb_table = unsafe {
+                    slice_from_raw_parts(
+                        ((elf_header as *const Elf64Header) as EfiPhysicalAddress
+                            + section_header.offset()) as *const Elf64Sym,
+                        (section_header.size() / section_header.entry_size()) as usize,
+                    )
+                    .as_ref()
+                }
+                .unwrap();
+
+                let mut cur_address = (elf_header as *const Elf64Header) as EfiPhysicalAddress
+                    + elf_header.section_header_offset();
+                for _ in 0..elf_header.section_header_num() {
+                    let section_header =
+                        unsafe { (cur_address as *const Elf64SectionHeader).as_ref() }.unwrap();
+
+                    match section_header.r#type() {
+                        ELF64_SECTION_TYPE_REL => {
+                            let rels = unsafe {
+                                slice_from_raw_parts(
+                                    ((elf_header as *const Elf64Header) as EfiPhysicalAddress
+                                        + section_header.offset())
+                                        as *const Elf64Rel,
+                                    (section_header.size() / section_header.entry_size()) as usize,
+                                )
+                                .as_ref()
+                            }
+                            .unwrap();
+                            let mut iter = rels.iter();
+                            'a: loop {
+                                match iter.next() {
+                                    Some(rel) => unsafe {
+                                        *((rel.offset() + kernel_offset as u64) as *mut u64) = (symb_table
+                                            .iter()
+                                            .nth(rel.sym() as usize)
+                                            .unwrap()
+                                            .value()
+                                            + kernel_offset)
+                                            as u64
+                                    },
+                                    None => break 'a (),
+                                }
+                            }
+                        }
+                        ELF64_SECTION_TYPE_RELA => {
+                            let relas = unsafe {
+                                slice_from_raw_parts(
+                                    ((elf_header as *const Elf64Header) as EfiPhysicalAddress
+                                        + section_header.offset())
+                                        as *const Elf64Rela,
+                                    (section_header.size() / section_header.entry_size()) as usize,
+                                )
+                                .as_ref()
+                            }
+                            .unwrap();
+                            let mut iter = relas.iter();
+                            'a: loop {
+                                match iter.next() {
+                                    Some(rela) => unsafe {
+                                        *((rela.offset() + kernel_offset as u64) as *mut u64) = ((symb_table
+                                            .iter()
+                                            .nth(rela.sym() as usize)
+                                            .unwrap()
+                                            .value()
+                                            + kernel_offset)
+                                            as i64
+                                            + rela.addend())
+                                            as u64
+                                    },
+                                    None => break 'a (),
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
+
+                    cur_address += elf_header.section_header_element_size() as EfiPhysicalAddress;
+                }
+                break;
+            }
+            _ => (),
+        }
+
+        cur_address += elf_header.section_header_element_size() as EfiPhysicalAddress;
     }
 }
 
@@ -817,13 +1181,15 @@ fn open_gop<'a>(
         Err(v) => return Err(v),
     };
     if num_gop_handles < 1 {
-        let _ = match output_string_cout!(
-            cout,
-            [b"No graphics output protocol handles found.\r\n".to_iter_str(IterStrFormat::none())]
-        ) {
-            Ok(res) => res,
-            Err(v) => return Err(v),
-        };
+        let _ =
+            match output_string_cout!(
+                cout,
+                [b"No graphics output protocol handles found.\r\n"
+                    .to_iter_str(IterStrFormat::none())]
+            ) {
+                Ok(res) => res,
+                Err(v) => return Err(v),
+            };
         return Err(EFI_ABORTED);
     }
 
@@ -850,8 +1216,10 @@ fn open_gop<'a>(
         None => {
             let _ = match output_string_cout!(
                 cout,
-                [b"Failed to get graphics output protocol with handle[0].\r\n"
-                    .to_iter_str(IterStrFormat::none())]
+                [
+                    b"Failed to get graphics output protocol with handle[0].\r\n"
+                        .to_iter_str(IterStrFormat::none())
+                ]
             ) {
                 Ok(res) => res,
                 Err(v) => return Err(v),

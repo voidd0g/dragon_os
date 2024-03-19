@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(asm_const)]
+#![feature(generic_const_exprs)]
 
 mod font;
 mod interrupt;
@@ -18,24 +19,17 @@ use core::{
     panic::PanicInfo,
 };
 
-extern crate alloc;
-use alloc::format;
-
 use common::{
     argument::Argument,
     iter_str::{IterStrFormat, Padding, Radix, ToIterStr},
-    uefi::constant::efi_memory_type::{
-        EFI_BOOT_SERVICES_CODE, EFI_BOOT_SERVICES_DATA, EFI_CONVENTIONAL_MEMORY,
-    },
 };
 use font::font_writer::FONT_HEIGHT;
 use interrupt::pop_interrupt_queue;
 
 use crate::{
-    interrupt::get_interrupt_descriptor_table,
-    memory_manager::BitmapMemoryManager,
+    interrupt::{get_interrupt_descriptor_table, interrupt_vector::INTERRUPT_VECTOR_XHCI},
     paging::setup_identity_page_table_2m,
-    pci::{xhci::XhcDevice, BusScanner},
+    pci::{msi_delivery_mode::MSI_DELIVERY_MODE_FIXED, xhci::XhcDevice, BusScanner},
     pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor},
     pointer::PointerWriter,
     segment::setup_segments,
@@ -48,7 +42,7 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
     loop {}
 }
 
-const KERNEL_MAIN_STACK_ALIGN: usize = 0x0010;
+const KERNEL_MAIN_STACK_ALIGN: usize = 16;
 const KERNEL_MAIN_STACK_SIZE: usize = 0x1000000;
 
 global_asm!(
@@ -63,7 +57,8 @@ KERNEL_MAIN_STACK:
 .section .text
 .global kernel_main
 kernel_main:
-    mov rsp, offset KERNEL_MAIN_STACK + {KERNEL_MAIN_STACK_SIZE}
+    lea rsp, KERNEL_MAIN_STACK[rip]
+    add rsp, {KERNEL_MAIN_STACK_SIZE}
     call kernel_main_core
 .fin:
     hlt
@@ -80,15 +75,11 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     let frame_buffer_config = arg.frame_buffer_config();
     let runtime_services = arg.runtime_services();
     let memory_map = arg.memory_map();
+    let services = Services::new(frame_buffer_config, runtime_services);
 
     setup_segments();
 
     setup_identity_page_table_2m();
-
-    let services = Services::new(
-        frame_buffer_config,
-        runtime_services,
-    );
 
     let mut height = 0;
 
@@ -221,7 +212,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
             && class_codes.interface() == XHCI_INTERFACE
         {
             xhci_found = Some(device);
-            if device.vendor_id() == INTEL_VENDOR_ID {
+            if true || device.vendor_id() == INTEL_VENDOR_ID {
                 break;
             }
         }
@@ -312,6 +303,40 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
                 PixelColor::new(128, 0, 0),
                 Vector2::new(0, height),
                 [b"Failed to initialize xhc device.".to_iter_str(IterStrFormat::none())]
+            );
+            end()
+        }
+    }
+
+    let bsp_local_apic_id = (unsafe { (0xFEE0_0020 as *const u32).read() } >> 24) as u8;
+    match xhci_found.configure_msi_fixed_destination(
+        bsp_local_apic_id,
+        true,
+        MSI_DELIVERY_MODE_FIXED,
+        INTERRUPT_VECTOR_XHCI,
+        0,
+    ) {
+        Ok(()) => (),
+        Err(()) => {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, height),
+                [b"Failed to set bsp local apic id to msi config."
+                    .to_iter_str(IterStrFormat::none())]
+            );
+            end()
+        }
+    }
+
+    match xhc_device.run(&services, &mut height) {
+        Ok(()) => (),
+        Err(()) => {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, height),
+                [b"Failed to run usb device.".to_iter_str(IterStrFormat::none())]
             );
             end()
         }

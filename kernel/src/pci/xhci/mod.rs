@@ -1,4 +1,9 @@
-use common::iter_str::{IterStrFormat, Padding, Radix, ToIterStr};
+pub mod command_ring;
+pub mod context;
+pub mod event_ring;
+pub mod transfer_request_block;
+
+use common::iter_str::{IterStrFormat, Padding, ToIterStr};
 
 use crate::{
     font::font_writer::FONT_HEIGHT,
@@ -8,9 +13,29 @@ use crate::{
     util::{get_bits_value, get_unsigned_int_8s, vector2::Vector2},
 };
 
+use self::{
+    command_ring::CommandRingManager,
+    context::{DeviceContextBaseAddressArray, DeviceContexts},
+    event_ring::{EventRingManager, EventRingManagerWithFixedSize},
+};
+
+const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
+const DEVICE_CONTEXT_BASE_ADDRESS_ARRAY_COUNT: usize = MAX_DEVICE_SLOTS_DESIRED as usize + 1;
+const COMMAND_RING_SIZE: usize = 8;
+const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT: u16 = 1;
+const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE: u16 = 64;
 pub struct XhcDevice {
     capability_registers: XhcCapabilityRegisters,
     operational_registers: XhcOperationalRegisters,
+    device_context_base_address_array:
+        DeviceContextBaseAddressArray<DEVICE_CONTEXT_BASE_ADDRESS_ARRAY_COUNT>,
+    device_contexts: DeviceContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
+    command_ring: CommandRingManager<COMMAND_RING_SIZE>,
+    primary_interrupter_event_ring: EventRingManagerWithFixedSize<
+        PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE,
+        PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT,
+    >,
+    runtime_registers: XhcRuntimeRegisters,
 }
 
 impl XhcDevice {
@@ -19,10 +44,18 @@ impl XhcDevice {
         let operational_registers_offset = capability_registers.capability_register_length();
         let operational_registers =
             XhcOperationalRegisters::new(base_address + operational_registers_offset as u64);
+        let runtime_registers_offset = capability_registers.runtime_register_space_offset();
+        let runtime_registers =
+            XhcRuntimeRegisters::new(base_address + runtime_registers_offset as u64);
 
         Self {
             capability_registers,
             operational_registers,
+            device_context_base_address_array: DeviceContextBaseAddressArray::new(),
+            device_contexts: DeviceContexts::new(),
+            command_ring: CommandRingManager::new(),
+            primary_interrupter_event_ring: EventRingManagerWithFixedSize::new(),
+            runtime_registers,
         }
     }
 
@@ -39,15 +72,19 @@ impl XhcDevice {
         *height += FONT_HEIGHT;
 
         if self.operational_registers.usb_status() & USB_STATUS_HOST_CONTROLLER_HALTED_MASK == 0 {
-            _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, *height),
-                [b"USB status host controller halted bit is zero."
-                    .to_iter_str(IterStrFormat::none())]
-            );
-            *height += FONT_HEIGHT;
-            return Err(());
+            self.operational_registers.usb_command_stop();
+
+            'a: loop {
+                match services.time_services().wait_for_nano_seconds(1_000_000) {
+                    Ok(()) => (),
+                    Err(()) => return Err(()),
+                }
+                if self.operational_registers.usb_status() & USB_STATUS_HOST_CONTROLLER_HALTED_MASK
+                    != 0
+                {
+                    break 'a ();
+                }
+            }
         }
 
         match output_string!(
@@ -64,12 +101,11 @@ impl XhcDevice {
         self.operational_registers
             .usb_command_host_controller_reset();
 
-        match services.time_services().wait_for_nano_seconds(1_000_000) {
-            Ok(()) => (),
-            Err(()) => return Err(()),
-        }
-
         'a: loop {
+            match services.time_services().wait_for_nano_seconds(1_000_000) {
+                Ok(()) => (),
+                Err(()) => return Err(()),
+            }
             if self.operational_registers.usb_command() & USB_COMMAND_HOST_CONTROLLER_RESET_MASK
                 == 0
             {
@@ -77,39 +113,117 @@ impl XhcDevice {
             }
         }
         'a: loop {
-            if self.operational_registers.usb_status() & USB_STATUS_CONTROLLER_NOT_REAY == 0 {
+            match services.time_services().wait_for_nano_seconds(1_000_000) {
+                Ok(()) => (),
+                Err(()) => return Err(()),
+            }
+            if self.operational_registers.usb_status() & USB_STATUS_CONTROLLER_NOT_READY == 0 {
                 break 'a ();
             }
         }
 
-        match output_string!(
-            services,
-            PixelColor::new(128, 0, 0),
-            Vector2::new(0, *height),
-            [b"Set max device slots.".to_iter_str(IterStrFormat::none()),]
-        ) {
-            Ok(()) => (),
-            Err(()) => return Err(()),
-        }
-        *height += FONT_HEIGHT;
         let max_device_slots = get_bits_value(
             self.capability_registers
                 .host_controller_structural_parameters_1(),
             0,
             7,
         ) as u8;
+        let slots_enabled = if max_device_slots < MAX_DEVICE_SLOTS_DESIRED {
+            max_device_slots
+        } else {
+            MAX_DEVICE_SLOTS_DESIRED
+        };
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Set max device slots to ".to_iter_str(IterStrFormat::none()),
+                slots_enabled.to_iter_str(IterStrFormat::none()),
+                b".".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
         self.operational_registers
-            .set_number_of_device_slots_enabled(if max_device_slots < MAX_DEVICE_SLOTS_DESIRED {
-                max_device_slots
-            } else {
-                MAX_DEVICE_SLOTS_DESIRED
-            });
+            .set_number_of_device_slots_enabled(slots_enabled);
 
-        let context_size = self
-            .capability_registers
-            .host_controller_cabability_parameters_1()
-            & 0x0000_0004
-            != 0;
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [b"Set DCBAAP.".to_iter_str(IterStrFormat::none()),]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+        self.operational_registers
+            .set_device_context_base_address_array_pointer(unsafe {
+                self.device_context_base_address_array.pointer()
+            } as u64);
+
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [b"Set command ring.".to_iter_str(IterStrFormat::none()),]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+        self.operational_registers
+            .set_command_ring_control_register(
+                self.command_ring.get_crcr_value_to_set(
+                    self.operational_registers.command_ring_control_register(),
+                ),
+            );
+
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Set primary interrupter event ring.".to_iter_str(IterStrFormat::none()),
+                self.capability_registers
+                    .runtime_register_space_offset()
+                    .to_iter_str(IterStrFormat::new(
+                        Some(common::iter_str::Radix::Hexadecimal),
+                        None,
+                        None
+                    ))
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+        let primary_interrupter_register_set =
+            self.runtime_registers.get_interrupter_register_set(0);
+        primary_interrupter_register_set.set_event_ring_segment_table_size(
+            self.primary_interrupter_event_ring.segment_table_size(),
+        );
+        primary_interrupter_register_set.set_event_ring_dequeue_pointer(
+            self.primary_interrupter_event_ring.deque_pointer() & 0xFFFF_FFFF_FFFF_FFF0 + 0x8,
+        );
+        primary_interrupter_register_set.set_event_ring_segment_table_base_address(
+            self.primary_interrupter_event_ring
+                .segment_table_base_address()
+                & 0xFFFF_FFFF_FFFF_FFC0,
+        );
+
+        primary_interrupter_register_set.set_interrupt_pending_and_enable();
+
+        self.operational_registers.usb_command_interrupter_enable();
+
+        // let context_size = self
+        //     .capability_registers
+        //     .host_controller_cabability_parameters_1()
+        //     & 0x0000_0004
+        //     != 0;
 
         match output_string!(
             services,
@@ -124,14 +238,53 @@ impl XhcDevice {
 
         Ok(())
     }
+
+    pub fn run(&self, services: &Services, height: &mut u32) -> Result<(), ()> {
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [b"Run usb.".to_iter_str(IterStrFormat::none()),]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+
+        self.operational_registers.usb_command_run();
+        match services.time_services().wait_for_nano_seconds(1_000_000) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+
+        'a: loop {
+            match services.time_services().wait_for_nano_seconds(1_000_000) {
+                Ok(()) => (),
+                Err(()) => return Err(()),
+            }
+            if self.operational_registers.usb_status() & USB_STATUS_HOST_CONTROLLER_HALTED_MASK == 0
+            {
+                break 'a ();
+            }
+        }
+
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [b"Usb started.".to_iter_str(IterStrFormat::none()),]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+        Ok(())
+    }
 }
 
 const USB_STATUS_HOST_CONTROLLER_HALTED_MASK: u32 = 0x0000_0001;
-const USB_STATUS_CONTROLLER_NOT_REAY: u32 = 0x0000_0800;
+const USB_STATUS_CONTROLLER_NOT_READY: u32 = 0x0000_0800;
 const USB_COMMAND_HOST_CONTROLLER_RESET_MASK: u32 = 0x0000_0002;
-const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
-
-struct DeviceContexts {}
 
 pub struct XhcCapabilityRegisters {
     base_address: u64,
@@ -175,13 +328,40 @@ impl XhcOperationalRegisters {
     pub fn usb_command_host_controller_reset(&self) {
         let usb_command = self.usb_command();
         *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
-            usb_command | USB_COMMAND_HOST_CONTROLLER_RESET_MASK;
+            (usb_command & 0xFFFF_FFFC) + 2;
+    }
+
+    pub fn usb_command_interrupter_enable(&self) {
+        let usb_command = self.usb_command();
+        *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
+            (usb_command & 0xFFFF_FFFB) + 4;
+    }
+
+    pub fn usb_command_run(&self) {
+        let usb_command = self.usb_command();
+        *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
+            (usb_command & 0xFFFF_FFFE) + 1;
+    }
+
+    pub fn usb_command_stop(&self) {
+        let usb_command = self.usb_command();
+        *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
+            (usb_command & 0xFFFF_FFFE) + 0;
     }
 
     pub fn set_number_of_device_slots_enabled(&self, number: u8) {
         let configure_register = self.configure_register();
-        *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
-            (configure_register & 0xFF_FF_FF_00) + number as u32;
+        *unsafe { ((self.base_address + 0x38) as *mut u32).as_mut() }.unwrap() =
+            (configure_register & 0xFFFF_FF00) + number as u32;
+    }
+
+    pub fn set_device_context_base_address_array_pointer(&self, address: u64) {
+        *unsafe { ((self.base_address + 0x30) as *mut u64).as_mut() }.unwrap() =
+            address & 0xFFFF_FFFF_FFFF_FFC0
+    }
+
+    pub fn set_command_ring_control_register(&self, val: u64) {
+        *unsafe { ((self.base_address + 0x18) as *mut u64).as_mut() }.unwrap() = val
     }
 
     pub fn usb_command(&self) -> u32 {
@@ -192,7 +372,72 @@ impl XhcOperationalRegisters {
         unsafe { ((self.base_address + 0x04) as *const u32).read() }
     }
 
+    pub fn command_ring_control_register(&self) -> u64 {
+        unsafe { ((self.base_address + 0x18) as *const u64).read() }
+    }
+
     pub fn configure_register(&self) -> u32 {
         unsafe { ((self.base_address + 0x38) as *const u32).read() }
+    }
+}
+
+pub struct XhcRuntimeRegisters {
+    base_address: u64,
+}
+
+impl XhcRuntimeRegisters {
+    pub const fn new(base_address: u64) -> Self {
+        Self { base_address }
+    }
+
+    pub fn get_interrupter_register_set(&self, index: u64) -> XhcInterrupterRegisterSet {
+        XhcInterrupterRegisterSet::new(self.base_address + 0x20 + 32 * index)
+    }
+}
+
+pub struct XhcInterrupterRegisterSet {
+    base_address: u64,
+}
+
+impl XhcInterrupterRegisterSet {
+    pub const fn new(base_address: u64) -> Self {
+        Self { base_address }
+    }
+
+    pub fn interrupter_management_register(&self) -> u32 {
+        unsafe { ((self.base_address + 0x00) as *const u32).read() }
+    }
+
+    pub fn event_ring_segment_table_base_address(&self) -> u64 {
+        unsafe { ((self.base_address + 0x10) as *const u64).read() }
+    }
+
+    pub fn event_ring_segment_table_size(&self) -> u32 {
+        unsafe { ((self.base_address + 0x08) as *const u32).read() }
+    }
+
+    pub fn event_ring_dequeue_pointer(&self) -> u64 {
+        unsafe { ((self.base_address + 0x18) as *const u64).read() }
+    }
+
+    pub fn set_interrupt_pending_and_enable(&self) {
+        *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
+            (self.interrupter_management_register() & 0xFFFF_FFFC) + 3;
+    }
+
+    pub fn set_event_ring_segment_table_size(&self, size: u16) {
+        *unsafe { ((self.base_address + 0x08) as *mut u32).as_mut() }.unwrap() =
+            (size as u32) + (self.event_ring_segment_table_size() & 0xFFFF_0000);
+    }
+
+    pub fn set_event_ring_segment_table_base_address(&self, address: u64) {
+        *unsafe { ((self.base_address + 0x10) as *mut u64).as_mut() }.unwrap() = (address
+            & 0xFFFF_FFFF_FFFF_FFC0)
+            + (self.event_ring_segment_table_base_address() & 0x3F);
+    }
+
+    pub fn set_event_ring_dequeue_pointer(&self, address: u64) {
+        *unsafe { ((self.base_address + 0x18) as *mut u64).as_mut() }.unwrap() =
+            (address & 0xFFFF_FFFF_FFFF_FFF0) + (self.event_ring_dequeue_pointer() & 0xF);
     }
 }

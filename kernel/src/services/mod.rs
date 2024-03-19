@@ -12,7 +12,7 @@ use common::{
 
 use crate::{
     font::font_writer::{FontWriter, FONT_HEIGHT, FONT_WIDTH},
-    pixel_writer::{pixel_color::PixelColor, PixelLineWriter, PixelWriter},
+    pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, PixelLineWriter, PixelWriter},
     util::vector2::Vector2,
 };
 
@@ -50,6 +50,24 @@ impl<'a> TimeServices<'a> {
         Self { runtime_services }
     }
 
+    pub fn wait_for_seconds(&self, seconds: u32) -> Result<(), ()> {
+        let wait_for = match self.runtime_services.get_time(None) {
+            Ok((cur_time, _)) => cur_time,
+            Err(_) => return Err(()),
+        }
+        .add_second(seconds);
+        'a: loop {
+            if wait_for
+                < match self.runtime_services.get_time(None) {
+                    Ok((cur_time, _)) => cur_time,
+                    Err(_) => return Err(()),
+                }
+            {
+                break 'a Ok(());
+            }
+        }
+    }
+
     pub fn wait_for_nano_seconds(&self, nano_seconds: u32) -> Result<(), ()> {
         let wait_for = match self.runtime_services.get_time(None) {
             Ok((cur_time, _)) => cur_time,
@@ -58,7 +76,7 @@ impl<'a> TimeServices<'a> {
         .add_nanosecond(nano_seconds);
         'a: loop {
             if wait_for
-                > match self.runtime_services.get_time(None) {
+                < match self.runtime_services.get_time(None) {
                     Ok((cur_time, _)) => cur_time,
                     Err(_) => return Err(()),
                 }

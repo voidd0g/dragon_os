@@ -12,16 +12,16 @@
 	"pre-link-args": {
 		"ld.lld": [
 			"--entry=kernel_main",
-			"--image-base=0x72A000",
+			"--image-base=0",
 			"--static",
-			"-znorelro"
+			"-znorelro",
+			"--pie"
 		]
 	},
 	"panic-strategy": "abort",
 	"default-hidden-visibility": true,
-	"executables": true,
-	"position-independent-executables": false,
 	"disable-redzone": true,
 	"exe-suffix": ".elf",
-	"emit-debug-gdb-scripts": false
+	"emit-debug-gdb-scripts": false,
+	"relocation-model": "pie"
 }

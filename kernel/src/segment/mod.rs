@@ -75,7 +75,7 @@ pub fn setup_segments() {
             data_segment(DESCRIPTOR_TYPE_READ_WRITE, 0, 0, 0x000F_FFFF);
         load_gdt(
             (GLOBAL_DESCRIPTOR_TABLE_COUNT * size_of::<SegmentDescriptor>() - 1) as u16,
-            addr_of!(GLOBAL_DESCRIPTOR_TABLE) as u64,
+            GLOBAL_DESCRIPTOR_TABLE.as_ptr() as u64,
         );
         set_segment_registers_unused(0);
         set_cs_and_ss(
@@ -112,7 +112,7 @@ set_segment_registers_unused:
 
 set_cs_and_ss:
     mov ss, si
-    mov rax, offset .next
+    lea rax, .next[rip]
     push rdi
     push rax
     retfq

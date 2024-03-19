@@ -11,3 +11,4 @@ pub type Elf64Machine = Elf64Half;
 pub type Elf64Version = Elf64Word;
 pub type Elf64Flag = Elf64Word;
 pub type Elf64ProgramType = Elf64Word;
+pub type Elf64SectionType = Elf64Word;

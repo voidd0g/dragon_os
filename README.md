@@ -9,9 +9,5 @@ The argument is to determine debug/release build.
 ```
 
 ## Mount
-For windows user, execute mount.ps1 lile below.
-If your .vhdx file name is not dragon_os.vhdx, you can edit mount.ps1.
-The argument is to determine folder from debug/release.
-```
-.\mount.ps1 $False
-```
+Put the kernel output at '/'(root) and rename it to 'KERNEL.ELF'
+Put the boot_loader output at '/EFI/BOOT/' and rename it to 'BOOTX64.EFI'

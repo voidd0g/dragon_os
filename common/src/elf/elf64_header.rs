@@ -33,4 +33,14 @@ impl Elf64Header {
     pub fn program_header_num(&self) -> Elf64Half {
         self.program_header_num
     }
+
+    pub fn section_header_offset(&self) -> Elf64Offset {
+        self.section_header_offset
+    }
+    pub fn section_header_element_size(&self) -> Elf64Half {
+        self.section_header_element_size
+    }
+    pub fn section_header_num(&self) -> Elf64Half {
+        self.section_header_num
+    }
 }
