@@ -20,6 +20,10 @@ impl TransferRequestBlock {
             ],
         }
     }
+
+    pub fn cycle_bit(&self) -> bool {
+        self.data[3] & 0x1 != 0
+    }
 }
 
 #[repr(align(64))]

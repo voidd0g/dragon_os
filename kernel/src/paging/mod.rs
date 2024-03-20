@@ -1,7 +1,4 @@
-use core::{
-    arch::{asm, global_asm},
-    ptr::addr_of,
-};
+use core::arch::{asm, global_asm};
 
 use self::page_size::PAGE_SIZE_2M;
 

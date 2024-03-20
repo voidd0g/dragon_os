@@ -12,7 +12,7 @@ use common::{
 
 use crate::{
     font::font_writer::{FontWriter, FONT_HEIGHT, FONT_WIDTH},
-    pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor, PixelLineWriter, PixelWriter},
+    pixel_writer::{pixel_color::PixelColor, PixelLineWriter, PixelWriter},
     util::vector2::Vector2,
 };
 

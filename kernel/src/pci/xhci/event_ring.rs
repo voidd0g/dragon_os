@@ -1,6 +1,9 @@
-use core::ptr::{addr_of, slice_from_raw_parts};
+use core::{mem::size_of, ptr::addr_of};
 
-use super::transfer_request_block::{TransferRequestBlock, TrbArray};
+use super::{
+    transfer_request_block::{TransferRequestBlock, TrbArray},
+    XhcInterrupterRegisterSet,
+};
 
 #[repr(C)]
 struct SegmentTableEntry {
@@ -61,6 +64,9 @@ where
 {
     segment_table: SegmentTableEntries<{ SEGMENT_COUNT as usize }>,
     trb_arrays: TrbArrays<{ SEGMENT_SIZE as usize }, { SEGMENT_COUNT as usize }>,
+    interrupter_register_set: XhcInterrupterRegisterSet,
+    cycle_bit: bool,
+    segment_index: usize,
 }
 
 impl<const SEGMENT_SIZE: u16, const SEGMENT_COUNT: u16>
@@ -69,7 +75,7 @@ where
     [(); SEGMENT_COUNT as usize]:,
     [(); SEGMENT_SIZE as usize]:,
 {
-    pub fn new() -> Self {
+    pub fn new(interrupter_register_set: XhcInterrupterRegisterSet) -> Self {
         let trb_arrays = TrbArrays::new();
         const SEGMENT_TABLE_RESET_VALUE: SegmentTableEntry = SegmentTableEntry::new(0, 0);
         let mut segment_table = [SEGMENT_TABLE_RESET_VALUE; SEGMENT_COUNT as usize];
@@ -80,31 +86,66 @@ where
         Self {
             trb_arrays,
             segment_table: SegmentTableEntries::new(segment_table),
+            interrupter_register_set,
+            cycle_bit: true,
+            segment_index: 0,
         }
     }
-}
 
-impl<const SEGMENT_SIZE: u16, const SEGMENT_COUNT: u16> EventRingManager
-    for EventRingManagerWithFixedSize<SEGMENT_SIZE, SEGMENT_COUNT>
-where
-    [(); SEGMENT_COUNT as usize]:,
-    [(); SEGMENT_SIZE as usize]:,
-{
-    fn segment_table_size(&self) -> u16 {
-        SEGMENT_COUNT
+    pub fn initialize(&self) {
+        self.interrupter_register_set
+            .set_event_ring_segment_table_size(SEGMENT_COUNT);
+        self.interrupter_register_set
+            .set_event_ring_dequeue_pointer(
+                self.trb_arrays.address(0) & 0xFFFF_FFFF_FFFF_FFF0 + 0x8,
+            );
+        self.interrupter_register_set
+            .set_event_ring_segment_table_base_address(
+                self.segment_table.address() & 0xFFFF_FFFF_FFFF_FFC0,
+            );
+        self.interrupter_register_set
+            .set_interrupt_pending_and_enable();
     }
 
-    fn deque_pointer(&self) -> u64 {
-        self.trb_arrays.address(0)
+    pub fn front(&self) -> Option<TransferRequestBlock> {
+        let dequeue_poiner =
+            self.interrupter_register_set.event_ring_dequeue_pointer() & 0xFFFF_FFFF_FFFF_FFF0;
+        let front = unsafe { (dequeue_poiner as *const TransferRequestBlock).read() };
+        if front.cycle_bit() == self.cycle_bit {
+            Some(front)
+        } else {
+            None
+        }
     }
 
-    fn segment_table_base_address(&self) -> u64 {
-        self.segment_table.address()
-    }
-}
+    pub fn pop(&mut self) -> Option<TransferRequestBlock> {
+        let dequeue_poiner =
+            self.interrupter_register_set.event_ring_dequeue_pointer() & 0xFFFF_FFFF_FFFF_FFF0;
+        let front = unsafe { (dequeue_poiner as *const TransferRequestBlock).read() };
+        if front.cycle_bit() == self.cycle_bit {
+            let mut next_dequeue_poiner = dequeue_poiner + size_of::<TransferRequestBlock>() as u64;
+            if next_dequeue_poiner
+                == self.trb_arrays.address(self.segment_index)
+                    + (size_of::<TransferRequestBlock>() * SEGMENT_SIZE as usize) as u64
+            {
+                self.segment_index += 1;
+                if self.segment_index == SEGMENT_COUNT as usize {
+                    self.segment_index = 0;
+                    self.cycle_bit = !self.cycle_bit;
+                }
+                next_dequeue_poiner = self.trb_arrays.address(self.segment_index);
+            }
+            self.interrupter_register_set
+                .set_event_ring_dequeue_pointer(
+                    next_dequeue_poiner
+                        & 0xFFFF_FFFF_FFFF_FFF0
+                            + self.interrupter_register_set.event_ring_dequeue_pointer()
+                        & 0xF,
+                );
 
-pub trait EventRingManager {
-    fn segment_table_size(&self) -> u16;
-    fn deque_pointer(&self) -> u64;
-    fn segment_table_base_address(&self) -> u64;
+            Some(front)
+        } else {
+            None
+        }
+    }
 }

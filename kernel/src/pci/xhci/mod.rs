@@ -1,9 +1,10 @@
 pub mod command_ring;
 pub mod context;
 pub mod event_ring;
+pub mod port;
 pub mod transfer_request_block;
 
-use common::iter_str::{IterStrFormat, Padding, ToIterStr};
+use common::iter_str::{IterStrFormat, ToIterStr};
 
 use crate::{
     font::font_writer::FONT_HEIGHT,
@@ -16,7 +17,7 @@ use crate::{
 use self::{
     command_ring::CommandRingManager,
     context::{DeviceContextBaseAddressArray, DeviceContexts},
-    event_ring::{EventRingManager, EventRingManagerWithFixedSize},
+    event_ring::EventRingManagerWithFixedSize,
 };
 
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
@@ -36,26 +37,32 @@ pub struct XhcDevice {
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT,
     >,
     runtime_registers: XhcRuntimeRegisters,
+    
 }
 
 impl XhcDevice {
     pub fn new(base_address: u64) -> Self {
         let capability_registers = XhcCapabilityRegisters::new(base_address);
         let operational_registers_offset = capability_registers.capability_register_length();
-        let operational_registers =
-            XhcOperationalRegisters::new(base_address + operational_registers_offset as u64);
         let runtime_registers_offset = capability_registers.runtime_register_space_offset();
-        let runtime_registers =
-            XhcRuntimeRegisters::new(base_address + runtime_registers_offset as u64);
 
         Self {
             capability_registers,
-            operational_registers,
+            operational_registers: XhcOperationalRegisters::new(
+                base_address + operational_registers_offset as u64,
+            ),
             device_context_base_address_array: DeviceContextBaseAddressArray::new(),
             device_contexts: DeviceContexts::new(),
-            command_ring: CommandRingManager::new(),
-            primary_interrupter_event_ring: EventRingManagerWithFixedSize::new(),
-            runtime_registers,
+            command_ring: CommandRingManager::new(XhcOperationalRegisters::new(
+                base_address + operational_registers_offset as u64,
+            )),
+            primary_interrupter_event_ring: EventRingManagerWithFixedSize::new(
+                XhcRuntimeRegisters::new(base_address + runtime_registers_offset as u64)
+                    .get_interrupter_register_set(0),
+            ),
+            runtime_registers: XhcRuntimeRegisters::new(
+                base_address + runtime_registers_offset as u64,
+            ),
         }
     }
 
@@ -175,12 +182,7 @@ impl XhcDevice {
             Err(()) => return Err(()),
         }
         *height += FONT_HEIGHT;
-        self.operational_registers
-            .set_command_ring_control_register(
-                self.command_ring.get_crcr_value_to_set(
-                    self.operational_registers.command_ring_control_register(),
-                ),
-            );
+        self.command_ring.initialize();
 
         match output_string!(
             services,
@@ -201,21 +203,8 @@ impl XhcDevice {
             Err(()) => return Err(()),
         }
         *height += FONT_HEIGHT;
-        let primary_interrupter_register_set =
-            self.runtime_registers.get_interrupter_register_set(0);
-        primary_interrupter_register_set.set_event_ring_segment_table_size(
-            self.primary_interrupter_event_ring.segment_table_size(),
-        );
-        primary_interrupter_register_set.set_event_ring_dequeue_pointer(
-            self.primary_interrupter_event_ring.deque_pointer() & 0xFFFF_FFFF_FFFF_FFF0 + 0x8,
-        );
-        primary_interrupter_register_set.set_event_ring_segment_table_base_address(
-            self.primary_interrupter_event_ring
-                .segment_table_base_address()
-                & 0xFFFF_FFFF_FFFF_FFC0,
-        );
 
-        primary_interrupter_register_set.set_interrupt_pending_and_enable();
+        self.primary_interrupter_event_ring.initialize();
 
         self.operational_registers.usb_command_interrupter_enable();
 

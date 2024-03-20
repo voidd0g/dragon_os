@@ -5,15 +5,7 @@ pub mod xhci;
 
 use core::arch::asm;
 
-use common::iter_str::{IterStrFormat, Padding, ToIterStr};
-
-use crate::{
-    font::font_writer::FONT_HEIGHT,
-    output_string,
-    pixel_writer::pixel_color::PixelColor,
-    services::Services,
-    util::{get_unsigned_int_16s, get_unsigned_int_8s, vector2::Vector2},
-};
+use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
 
 use self::pci_capability_id::PCI_CAPABILITY_ID_MSI;
 

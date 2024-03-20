@@ -28,8 +28,12 @@ use interrupt::pop_interrupt_queue;
 
 use crate::{
     interrupt::{get_interrupt_descriptor_table, interrupt_vector::INTERRUPT_VECTOR_XHCI},
+    memory_manager::BitmapMemoryManager,
     paging::setup_identity_page_table_2m,
-    pci::{msi_delivery_mode::MSI_DELIVERY_MODE_FIXED, xhci::XhcDevice, BusScanner},
+    pci::{
+        local_apic::local_apic_id, msi_delivery_mode::MSI_DELIVERY_MODE_FIXED, xhci::XhcDevice,
+        BusScanner,
+    },
     pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor},
     pointer::PointerWriter,
     segment::setup_segments,
@@ -76,6 +80,8 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     let runtime_services = arg.runtime_services();
     let memory_map = arg.memory_map();
     let services = Services::new(frame_buffer_config, runtime_services);
+
+    let memory_manager = BitmapMemoryManager::new(memory_map);
 
     setup_segments();
 
@@ -308,7 +314,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
         }
     }
 
-    let bsp_local_apic_id = (unsafe { (0xFEE0_0020 as *const u32).read() } >> 24) as u8;
+    let bsp_local_apic_id = local_apic_id();
     match xhci_found.configure_msi_fixed_destination(
         bsp_local_apic_id,
         true,

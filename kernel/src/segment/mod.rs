@@ -1,8 +1,4 @@
-use core::{
-    arch::{asm, global_asm},
-    mem::size_of,
-    ptr::addr_of,
-};
+use core::{arch::global_asm, mem::size_of};
 
 use self::{
     descriptor_type::{DESCRIPTOR_TYPE_EXECUTE_READ, DESCRIPTOR_TYPE_READ_WRITE},
