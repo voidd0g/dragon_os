@@ -22,7 +22,7 @@ impl SegmentTableEntry {
     }
 }
 
-#[repr(align(64))]
+#[repr(align(0x1000))]
 struct SegmentTableEntries<const ENTRY_COUNT: usize> {
     segment_table_entries: [SegmentTableEntry; ENTRY_COUNT],
 }
@@ -39,7 +39,7 @@ impl<const ENTRY_COUNT: usize> SegmentTableEntries<ENTRY_COUNT> {
     }
 }
 
-#[repr(align(64))]
+#[repr(align(0x1000))]
 pub struct TrbArrays<const ARRAY_SIZE: usize, const ARRAY_COUNT: usize> {
     trbs: [TrbArray<ARRAY_SIZE>; ARRAY_COUNT],
 }

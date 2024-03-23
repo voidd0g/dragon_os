@@ -1,24 +1,36 @@
 use super::{transfer_request_block::TrbArray, XhcOperationalRegisters};
 
-pub struct CommandRingManager<const COMMAND_RING_SIZE: usize>
+pub struct SoftwareRingManager<const COMMAND_RING_SIZE: usize>
 where
     [(); COMMAND_RING_SIZE]:,
 {
     cycle_bit: bool,
     writing_index: usize,
-    trbs: TrbArray<COMMAND_RING_SIZE>,
+    trbs: SoftwareRingTrbArray<COMMAND_RING_SIZE>,
     operational_registers: XhcOperationalRegisters,
 }
 
-impl<const COMMAND_RING_SIZE: usize> CommandRingManager<COMMAND_RING_SIZE>
+#[repr(align(0x1000))]
+pub struct SoftwareRingTrbArray<const RING_SIZE: usize>(TrbArray<RING_SIZE>);
+impl<const RING_SIZE: usize> SoftwareRingTrbArray<RING_SIZE> {
+    pub const fn new() -> Self {
+        Self(TrbArray::new())
+    }
+
+    pub fn address(&self) -> u64 {
+        self.0.address()
+    }
+}
+
+impl<const RING_SIZE: usize> SoftwareRingManager<RING_SIZE>
 where
-    [(); COMMAND_RING_SIZE]:,
+    [(); RING_SIZE]:,
 {
     pub const fn new(operational_registers: XhcOperationalRegisters) -> Self {
         Self {
             cycle_bit: true,
             writing_index: 0,
-            trbs: TrbArray::new(),
+            trbs: SoftwareRingTrbArray::new(),
             operational_registers,
         }
     }

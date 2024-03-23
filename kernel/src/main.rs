@@ -348,6 +348,19 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
         }
     }
 
+    match xhc_device.reset_ports(&services, &mut height) {
+        Ok(()) => (),
+        Err(()) => {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, height),
+                [b"Failed to reset usb ports.".to_iter_str(IterStrFormat::none())]
+            );
+            end()
+        }
+    }
+
     match services
         .draw_services()
         .put_pixels(PointerWriter::new(Vector2::new(300, 300)))
@@ -380,15 +393,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
                             services,
                             PixelColor::new(128, 0, 0),
                             Vector2::new(0, height),
-                            [
-                                b"xHCI MMIO base address is ".to_iter_str(IterStrFormat::none()),
-                                xhci_mmio_base.to_iter_str(IterStrFormat::new(
-                                    Some(Radix::Hexadecimal),
-                                    Some(true),
-                                    Some(Padding::new(b'0', 16))
-                                )),
-                                b".".to_iter_str(IterStrFormat::none()),
-                            ]
+                            [b"xHCI interrupt caught.".to_iter_str(IterStrFormat::none()),]
                         ) {
                             Ok(()) => (),
                             Err(()) => end(),

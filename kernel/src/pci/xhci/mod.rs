@@ -1,8 +1,10 @@
-pub mod command_ring;
 pub mod context;
+pub mod device;
 pub mod event_ring;
 pub mod port;
+pub mod software_ring;
 pub mod transfer_request_block;
+pub mod port_status;
 
 use common::iter_str::{IterStrFormat, ToIterStr};
 
@@ -15,9 +17,7 @@ use crate::{
 };
 
 use self::{
-    command_ring::CommandRingManager,
-    context::{DeviceContextBaseAddressArray, DeviceContexts},
-    event_ring::EventRingManagerWithFixedSize,
+    context::{DeviceContextBaseAddressArray, DeviceContexts, InputContexts}, event_ring::EventRingManagerWithFixedSize, port_status::PortStatus, software_ring::SoftwareRingManager, transfer_request_block::typed_transfer_request_block::TypedTransferRequestBlock
 };
 
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
@@ -25,19 +25,21 @@ const DEVICE_CONTEXT_BASE_ADDRESS_ARRAY_COUNT: usize = MAX_DEVICE_SLOTS_DESIRED 
 const COMMAND_RING_SIZE: usize = 8;
 const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT: u16 = 1;
 const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE: u16 = 64;
+const MAX_PORT_POSSIBLE: u8 = 255;
 pub struct XhcDevice {
     capability_registers: XhcCapabilityRegisters,
     operational_registers: XhcOperationalRegisters,
     device_context_base_address_array:
         DeviceContextBaseAddressArray<DEVICE_CONTEXT_BASE_ADDRESS_ARRAY_COUNT>,
-    device_contexts: DeviceContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
-    command_ring: CommandRingManager<COMMAND_RING_SIZE>,
+    command_ring: SoftwareRingManager<COMMAND_RING_SIZE>,
     primary_interrupter_event_ring: EventRingManagerWithFixedSize<
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE,
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT,
     >,
     runtime_registers: XhcRuntimeRegisters,
-    
+    ports_status: [PortStatus; MAX_PORT_POSSIBLE as usize],
+    device_contexts: DeviceContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
+    input_contexts: InputContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
 }
 
 impl XhcDevice {
@@ -52,8 +54,7 @@ impl XhcDevice {
                 base_address + operational_registers_offset as u64,
             ),
             device_context_base_address_array: DeviceContextBaseAddressArray::new(),
-            device_contexts: DeviceContexts::new(),
-            command_ring: CommandRingManager::new(XhcOperationalRegisters::new(
+            command_ring: SoftwareRingManager::new(XhcOperationalRegisters::new(
                 base_address + operational_registers_offset as u64,
             )),
             primary_interrupter_event_ring: EventRingManagerWithFixedSize::new(
@@ -63,6 +64,9 @@ impl XhcDevice {
             runtime_registers: XhcRuntimeRegisters::new(
                 base_address + runtime_registers_offset as u64,
             ),
+            ports_status: [PortStatus::NotConnected; MAX_PORT_POSSIBLE as usize],
+            device_contexts: DeviceContexts::new(),
+            input_contexts: InputContexts::new(),
         }
     }
 
@@ -208,12 +212,6 @@ impl XhcDevice {
 
         self.operational_registers.usb_command_interrupter_enable();
 
-        // let context_size = self
-        //     .capability_registers
-        //     .host_controller_cabability_parameters_1()
-        //     & 0x0000_0004
-        //     != 0;
-
         match output_string!(
             services,
             PixelColor::new(128, 0, 0),
@@ -268,6 +266,107 @@ impl XhcDevice {
         }
         *height += FONT_HEIGHT;
         Ok(())
+    }
+
+    fn is_context_size_64(&self) -> bool {
+        self.capability_registers
+            .host_controller_cabability_parameters_1()
+            & 0x0000_0004
+            != 0
+    }
+
+    fn is_port_connected(&self, index: u8) -> bool {
+        self.operational_registers
+            .port_status_and_control_register(index)
+            & 0x1
+            != 0
+    }
+
+    fn reset_port(&self, index: u8, services: &Services, height: &mut u32) -> Result<(), ()> {
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Reset ".to_iter_str(IterStrFormat::none()),
+                index.to_iter_str(IterStrFormat::none()),
+                b"-th usb port.".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+        let port_status_and_control_register = self
+            .operational_registers
+            .port_status_and_control_register(index);
+        self.operational_registers
+            .set_port_status_and_control_register(
+                index,
+                (port_status_and_control_register & 0x0E00_C3E0) + 0x0002_0010,
+            );
+
+        'a: loop {
+            match services.time_services().wait_for_nano_seconds(1_000_000) {
+                Ok(()) => (),
+                Err(()) => return Err(()),
+            }
+            if self
+                .operational_registers
+                .port_status_and_control_register(index)
+                & 0x0000_0010
+                != 0
+            {
+                break 'a Ok(());
+            }
+        }
+    }
+
+    pub fn reset_ports(&self, services: &Services, height: &mut u32) -> Result<(), ()> {
+        let port_count = self.max_ports();
+        for i in 1..=port_count {
+            if self.is_port_connected(i) {
+                match output_string!(
+                    services,
+                    PixelColor::new(128, 0, 0),
+                    Vector2::new(0, *height),
+                    [
+                        i.to_iter_str(IterStrFormat::none()),
+                        b"-th usb port is connected.".to_iter_str(IterStrFormat::none()),
+                    ]
+                ) {
+                    Ok(()) => (),
+                    Err(()) => return Err(()),
+                }
+                *height += FONT_HEIGHT;
+                match self.reset_port(i, services, height) {
+                    Ok(()) => (),
+                    Err(()) => return Err(()),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn max_ports(&self) -> u8 {
+        get_unsigned_int_8s(
+            self.capability_registers
+                .host_controller_structural_parameters_1(),
+        )
+        .3
+    }
+
+    pub fn process_events(&mut self) -> Result<(), ()> {
+        'a: loop {
+            match self.primary_interrupter_event_ring.pop() {
+                Some(event) => {
+                    match TypedTransferRequestBlock::from_transfer_request_block(event) {
+                        _ => break 'a Err(()),
+                    }
+                }
+                None => break 'a Ok(()),
+            }
+        }
     }
 }
 
@@ -353,6 +452,11 @@ impl XhcOperationalRegisters {
         *unsafe { ((self.base_address + 0x18) as *mut u64).as_mut() }.unwrap() = val
     }
 
+    pub fn set_port_status_and_control_register(&self, index: u8, val: u32) {
+        *unsafe { ((self.base_address + 0x400 + 0x10 * index as u64) as *mut u32).as_mut() }
+            .unwrap() = val
+    }
+
     pub fn usb_command(&self) -> u32 {
         unsafe { ((self.base_address + 0x00) as *const u32).read() }
     }
@@ -367,6 +471,10 @@ impl XhcOperationalRegisters {
 
     pub fn configure_register(&self) -> u32 {
         unsafe { ((self.base_address + 0x38) as *const u32).read() }
+    }
+
+    pub fn port_status_and_control_register(&self, index: u8) -> u32 {
+        unsafe { ((self.base_address + 0x400 + 0x10 * index as u64) as *const u32).read() }
     }
 }
 
