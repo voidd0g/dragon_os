@@ -13,15 +13,19 @@ pub enum TypedTransferRequestBlock {
 impl TypedTransferRequestBlock {
     pub fn from_transfer_request_block(trb: TransferRequestBlock) -> Result<Self, ()> {
         match trb.trb_type() {
-            TRB_TYPE_ID_TRANSFER_EVENT => Ok(TypedTransferRequestBlock::TransferEventTrb(TransferEventTrb::from_transfer_request_block(trb))),
+            TRB_TYPE_ID_TRANSFER_EVENT => Ok(TypedTransferRequestBlock::TransferEventTrb(
+                TransferEventTrb::from_transfer_request_block(trb),
+            )),
             _ => Err(()),
         }
     }
 
     pub fn into_transfer_request_block(self) -> Result<TransferRequestBlock, ()> {
         match self {
-            TypedTransferRequestBlock::LinkTrb(link_trb) => Ok(link_trb.into_transfer_request_block()),
-            _ => Err(())
+            TypedTransferRequestBlock::LinkTrb(link_trb) => {
+                Ok(link_trb.into_transfer_request_block())
+            }
+            _ => Err(()),
         }
     }
 }

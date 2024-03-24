@@ -164,7 +164,6 @@ pub struct InputContext64 {
     padding: [u8; 0x7C0],
 }
 
-
 #[repr(C)]
 pub struct DeviceContext32 {
     slot_context: SlotContext32,

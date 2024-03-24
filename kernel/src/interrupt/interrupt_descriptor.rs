@@ -1,11 +1,6 @@
 #[repr(C)]
 pub struct InterruptDescriptor {
-    offset_low: u16,
-    segment_selector: u16,
-    attibutes: u16,
-    offset_middle: u16,
-    offset_high: u32,
-    reserved: u32,
+    data: [u32; 4],
 }
 
 impl InterruptDescriptor {
@@ -18,15 +13,16 @@ impl InterruptDescriptor {
         present: bool,
     ) -> Self {
         Self {
-            offset_low: offset as u16,
-            segment_selector,
-            attibutes: if present { 0x80_00 } else { 0x00_00 }
-                + ((descriptor_privilege_level as u16 & 0x00_07) << 12)
-                + ((r#type as u16 & 0x00_0F) << 8)
-                + (interrupt_stack_table as u16 & 0x00_07),
-            offset_middle: (offset >> u16::BITS) as u16,
-            offset_high: (offset >> (u16::BITS + u16::BITS)) as u32,
-            reserved: 0,
+            data: [
+                ((offset & 0xFFFF) as u32) + ((segment_selector as u32) << 16),
+                ((offset & 0xFFFF_0000) as u32)
+                    + (if present { 1 } else { 0 } << 15)
+                    + ((descriptor_privilege_level as u32 & 0x3) << 13)
+                    + ((r#type as u32 & 0xF) << 8)
+                    + (interrupt_stack_table as u32 & 0x7),
+                (offset >> 32) as u32,
+                0,
+            ],
         }
     }
 }

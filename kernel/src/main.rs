@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(asm_const)]
 #![feature(generic_const_exprs)]
+#![feature(abi_x86_interrupt)]
 
 mod font;
 mod interrupt;
@@ -27,7 +28,9 @@ use font::font_writer::FONT_HEIGHT;
 use interrupt::pop_interrupt_queue;
 
 use crate::{
-    interrupt::{get_interrupt_descriptor_table, interrupt_vector::INTERRUPT_VECTOR_XHCI},
+    interrupt::{
+        interrupt_vector::INTERRUPT_VECTOR_XHCI, setup_interrupt_descriptor_table, InterruptMessage,
+    },
     memory_manager::BitmapMemoryManager,
     paging::setup_identity_page_table_2m,
     pci::{
@@ -218,7 +221,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
             && class_codes.interface() == XHCI_INTERFACE
         {
             xhci_found = Some(device);
-            if true || device.vendor_id() == INTEL_VENDOR_ID {
+            if device.vendor_id() == INTEL_VENDOR_ID {
                 break;
             }
         }
@@ -275,7 +278,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
         }
     }
 
-    get_interrupt_descriptor_table().load();
+    setup_interrupt_descriptor_table();
 
     let xhci_mmio_base = xhci_found.base_address_register0();
 
@@ -299,24 +302,10 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     height += FONT_HEIGHT;
     height %= frame_buffer_config.vertical_resolution();
 
-    let xhc_device = XhcDevice::new(xhci_mmio_base);
-
-    match xhc_device.initialize(&services, &mut height) {
-        Ok(()) => (),
-        Err(()) => {
-            _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, height),
-                [b"Failed to initialize xhc device.".to_iter_str(IterStrFormat::none())]
-            );
-            end()
-        }
-    }
-
     let bsp_local_apic_id = local_apic_id();
     match xhci_found.configure_msi_fixed_destination(
         bsp_local_apic_id,
+        true,
         true,
         MSI_DELIVERY_MODE_FIXED,
         INTERRUPT_VECTOR_XHCI,
@@ -330,6 +319,21 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
                 Vector2::new(0, height),
                 [b"Failed to set bsp local apic id to msi config."
                     .to_iter_str(IterStrFormat::none())]
+            );
+            end()
+        }
+    }
+
+    let xhc_device = XhcDevice::new(xhci_mmio_base);
+
+    match xhc_device.initialize(&services, &mut height) {
+        Ok(()) => (),
+        Err(()) => {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, height),
+                [b"Failed to initialize xhc device.".to_iter_str(IterStrFormat::none())]
             );
             end()
         }
@@ -388,7 +392,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
                     asm!("sti");
                 }
                 match v {
-                    interrupt::InterruptMessage::XhciInterrupt => {
+                    InterruptMessage::XhciInterrupt => {
                         match output_string!(
                             services,
                             PixelColor::new(128, 0, 0),

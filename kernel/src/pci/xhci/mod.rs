@@ -2,9 +2,9 @@ pub mod context;
 pub mod device;
 pub mod event_ring;
 pub mod port;
+pub mod port_status;
 pub mod software_ring;
 pub mod transfer_request_block;
-pub mod port_status;
 
 use common::iter_str::{IterStrFormat, ToIterStr};
 
@@ -17,7 +17,11 @@ use crate::{
 };
 
 use self::{
-    context::{DeviceContextBaseAddressArray, DeviceContexts, InputContexts}, event_ring::EventRingManagerWithFixedSize, port_status::PortStatus, software_ring::SoftwareRingManager, transfer_request_block::typed_transfer_request_block::TypedTransferRequestBlock
+    context::{DeviceContextBaseAddressArray, DeviceContexts, InputContexts},
+    event_ring::EventRingManagerWithFixedSize,
+    port_status::PortStatus,
+    software_ring::SoftwareRingManager,
+    transfer_request_block::typed_transfer_request_block::TypedTransferRequestBlock,
 };
 
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
@@ -192,16 +196,7 @@ impl XhcDevice {
             services,
             PixelColor::new(128, 0, 0),
             Vector2::new(0, *height),
-            [
-                b"Set primary interrupter event ring.".to_iter_str(IterStrFormat::none()),
-                self.capability_registers
-                    .runtime_register_space_offset()
-                    .to_iter_str(IterStrFormat::new(
-                        Some(common::iter_str::Radix::Hexadecimal),
-                        None,
-                        None
-                    ))
-            ]
+            [b"Set primary interrupter event ring.".to_iter_str(IterStrFormat::none()),]
         ) {
             Ok(()) => (),
             Err(()) => return Err(()),
@@ -315,7 +310,7 @@ impl XhcDevice {
                 .operational_registers
                 .port_status_and_control_register(index)
                 & 0x0000_0010
-                != 0
+                == 0
             {
                 break 'a Ok(());
             }
@@ -416,7 +411,7 @@ impl XhcOperationalRegisters {
     pub fn usb_command_host_controller_reset(&self) {
         let usb_command = self.usb_command();
         *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
-            (usb_command & 0xFFFF_FFFC) + 2;
+            (usb_command & 0xFFFF_FFFD) + 2;
     }
 
     pub fn usb_command_interrupter_enable(&self) {
@@ -505,12 +500,12 @@ impl XhcInterrupterRegisterSet {
         unsafe { ((self.base_address + 0x00) as *const u32).read() }
     }
 
-    pub fn event_ring_segment_table_base_address(&self) -> u64 {
-        unsafe { ((self.base_address + 0x10) as *const u64).read() }
-    }
-
     pub fn event_ring_segment_table_size(&self) -> u32 {
         unsafe { ((self.base_address + 0x08) as *const u32).read() }
+    }
+
+    pub fn event_ring_segment_table_base_address(&self) -> u64 {
+        unsafe { ((self.base_address + 0x10) as *const u64).read() }
     }
 
     pub fn event_ring_dequeue_pointer(&self) -> u64 {

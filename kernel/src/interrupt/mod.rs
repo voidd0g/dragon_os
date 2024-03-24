@@ -1,11 +1,12 @@
 use core::{
     arch::{asm, global_asm},
+    mem::transmute,
     ptr::addr_of_mut,
 };
 
-use crate::util::queue::Queue;
+use crate::{segment::descriptor_type::DESCRIPTOR_TYPE_INTERRUPT_GATE, util::queue::Queue};
 
-use self::interrupt_descriptor::InterruptDescriptor;
+use self::{interrupt_descriptor::InterruptDescriptor, interrupt_vector::INTERRUPT_VECTOR_XHCI};
 
 pub mod interrupt_descriptor;
 pub mod interrupt_vector;
@@ -13,7 +14,7 @@ pub mod interrupt_vector;
 static mut INTERRUPT_DESCRIPTOR_TABLE: InterruptDescriptorTable = InterruptDescriptorTable::new();
 const IDT_SIZE: usize = 256;
 
-pub struct InterruptDescriptorTable {
+struct InterruptDescriptorTable {
     interrupt_descriptor_table: [InterruptDescriptor; IDT_SIZE],
 }
 
@@ -28,14 +29,14 @@ impl InterruptDescriptorTable {
 
     pub fn set_idt_entry(
         &mut self,
-        index: u8,
+        vector: u8,
         offset: u64,
         r#type: u8,
         descriptor_privilege_level: u8,
     ) {
-        self.interrupt_descriptor_table[index as usize] = InterruptDescriptor::new(
+        self.interrupt_descriptor_table[vector as usize] = InterruptDescriptor::new(
             offset,
-            get_cs(),
+            unsafe { get_cs() },
             0,
             r#type,
             descriptor_privilege_level,
@@ -47,7 +48,7 @@ impl InterruptDescriptorTable {
         unsafe {
             load_idt(
                 (IDT_SIZE - 1) as u16,
-                self.interrupt_descriptor_table.as_ptr() as usize as u64,
+                self.interrupt_descriptor_table.as_ptr() as u64,
             )
         };
     }
@@ -55,6 +56,7 @@ impl InterruptDescriptorTable {
 
 extern "C" {
     fn load_idt(size_minus_one: u16, head_address: u64);
+    fn get_cs() -> u16;
 }
 global_asm!(
     r#"
@@ -68,17 +70,41 @@ load_idt:
 	mov rsp, rbp
 	pop rbp
 	ret
+
+get_cs:
+    xor eax, eax
+    mov ax, cs
+    ret
 "#
 );
 
-pub fn get_interrupt_descriptor_table() -> &'static mut InterruptDescriptorTable {
-    unsafe { addr_of_mut!(INTERRUPT_DESCRIPTOR_TABLE).as_mut() }.unwrap()
+pub fn setup_interrupt_descriptor_table() {
+    let idt = unsafe { addr_of_mut!(INTERRUPT_DESCRIPTOR_TABLE).as_mut() }.unwrap();
+    idt.set_idt_entry(
+        INTERRUPT_VECTOR_XHCI,
+        xhci_interrupt_handler as u64,
+        DESCRIPTOR_TYPE_INTERRUPT_GATE,
+        0,
+    );
+    idt.load();
 }
 
-fn get_cs() -> u16 {
-    let ret: u64;
-    unsafe { asm!("xor eax, eax", "mov ax, cs", out("eax") ret) }
-    ret as u16
+fn notify_end_of_interrupt() {
+    *unsafe { (0xFEE0_00B0 as *mut u32).as_mut() }.unwrap() = 0
+}
+
+extern "x86-interrupt" fn xhci_interrupt_handler(_: *const InterruptFrame) {
+    _ = push_interrupt_queue(InterruptMessage::XhciInterrupt);
+    notify_end_of_interrupt();
+}
+
+#[repr(C)]
+struct InterruptFrame {
+    rip: u64,
+    cs: u64,
+    rflags: u64,
+    rsp: u64,
+    ss: u64,
 }
 
 pub enum InterruptMessage {

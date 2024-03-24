@@ -343,8 +343,8 @@ impl PciDevice {
             address,
             0x00,
         ));
-        let is_64_bit = message_control & 0x80 != 0;
-        let multiple_message_capable = (message_control >> 1) & 0x07;
+        let is_64_bit = message_control & 0x40 != 0;
+        let multiple_message_capable = (message_control & 0x0E) >> 1;
         write_capabilities_register(
             self.bus,
             self.device,
@@ -357,10 +357,10 @@ impl PciDevice {
                         multiple_message_capable
                     } else {
                         num_vector_exponent
-                    } & 0x07)
+                    } & 0x7)
                         << 4)
                     + 1) as u32)
-                << u16::BITS,
+                << 16,
         );
         write_capabilities_register(
             self.bus,
@@ -376,7 +376,14 @@ impl PciDevice {
             self.function,
             address,
             if is_64_bit { 0x0C } else { 0x08 },
-            message_data as u32,
+            (read_capabilities_register(
+                self.bus,
+                self.device,
+                self.function,
+                address,
+                if is_64_bit { 0x0C } else { 0x08 },
+            ) & 0xFFFF_0000)
+                + (message_data as u32),
         );
     }
 
@@ -408,14 +415,15 @@ impl PciDevice {
     pub fn configure_msi_fixed_destination(
         &self,
         apic_id: u8,
+        destination_physical: bool,
         trigger_mode_is_level: bool,
         delivery_mode: u8,
         vector: u8,
         num_vector_exponent: u16,
     ) -> Result<(), ()> {
-        let message_address = 0xFEE0_0000 + ((apic_id as u32) << 12);
-        let message_data = (if trigger_mode_is_level { 1 } else { 0 } << 15)
-            + (((delivery_mode & 0x07) as u16) << 8)
+        let message_address = 0xFEE0_0000 + ((apic_id as u32) << 12) + 0x8 + if destination_physical { 0x0 } else { 0x4 };
+        let message_data = (if trigger_mode_is_level { 0x3 } else { 0x0 } << 14)
+            + (((delivery_mode & 0x7) as u16) << 8)
             + vector as u16;
         self.configure_msi(message_address, message_data, num_vector_exponent)
     }

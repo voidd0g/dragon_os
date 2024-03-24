@@ -96,13 +96,9 @@ where
         self.interrupter_register_set
             .set_event_ring_segment_table_size(SEGMENT_COUNT);
         self.interrupter_register_set
-            .set_event_ring_dequeue_pointer(
-                self.trb_arrays.address(0) & 0xFFFF_FFFF_FFFF_FFF0 + 0x8,
-            );
+            .set_event_ring_dequeue_pointer(self.trb_arrays.address(0));
         self.interrupter_register_set
-            .set_event_ring_segment_table_base_address(
-                self.segment_table.address() & 0xFFFF_FFFF_FFFF_FFC0,
-            );
+            .set_event_ring_segment_table_base_address(self.segment_table.address());
         self.interrupter_register_set
             .set_interrupt_pending_and_enable();
     }
@@ -136,12 +132,7 @@ where
                 next_dequeue_poiner = self.trb_arrays.address(self.segment_index);
             }
             self.interrupter_register_set
-                .set_event_ring_dequeue_pointer(
-                    next_dequeue_poiner
-                        & 0xFFFF_FFFF_FFFF_FFF0
-                            + self.interrupter_register_set.event_ring_dequeue_pointer()
-                        & 0xF,
-                );
+                .set_event_ring_dequeue_pointer(next_dequeue_poiner);
 
             Some(front)
         } else {

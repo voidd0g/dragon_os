@@ -45,7 +45,7 @@ impl<T> Queue<T> {
             Some(_) => Err(()),
             None => {
                 *target = Some(v);
-                self.in_pos = (self.out_pos + 1) % self.capacity;
+                self.in_pos = (self.in_pos + 1) % self.capacity;
                 self.count += 1;
                 Ok(())
             }
