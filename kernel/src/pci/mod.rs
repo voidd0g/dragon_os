@@ -421,7 +421,10 @@ impl PciDevice {
         vector: u8,
         num_vector_exponent: u16,
     ) -> Result<(), ()> {
-        let message_address = 0xFEE0_0000 + ((apic_id as u32) << 12) + 0x8 + if destination_physical { 0x0 } else { 0x4 };
+        let message_address = 0xFEE0_0000
+            + ((apic_id as u32) << 12)
+            + 0x8
+            + if destination_physical { 0x0 } else { 0x4 };
         let message_data = (if trigger_mode_is_level { 0x3 } else { 0x0 } << 14)
             + (((delivery_mode & 0x7) as u16) << 8)
             + vector as u16;

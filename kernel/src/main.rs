@@ -29,7 +29,7 @@ use interrupt::pop_interrupt_queue;
 
 use crate::{
     interrupt::{
-        interrupt_vector::INTERRUPT_VECTOR_XHCI, setup_interrupt_descriptor_table, InterruptMessage,
+        interrupt_vector::INTERRUPT_VECTOR_XHCI, setup_interrupt_descriptor_table, InterruptMessage, INTERRUPT_OCCURED,
     },
     memory_manager::BitmapMemoryManager,
     paging::setup_identity_page_table_2m,
@@ -384,6 +384,15 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     loop {
         unsafe {
             asm!("cli");
+        }
+        if unsafe { INTERRUPT_OCCURED } {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, height),
+                [b"Interrupt occured.".to_iter_str(IterStrFormat::none())]
+            );
+            unsafe { INTERRUPT_OCCURED = false };
         }
         let popped = pop_interrupt_queue();
         match popped {

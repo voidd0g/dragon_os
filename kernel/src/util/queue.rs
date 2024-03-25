@@ -1,4 +1,4 @@
-use core::mem::swap;
+use core::mem::{size_of, swap};
 
 pub struct Queue<T> {
     buf: *mut Option<T>,
@@ -20,8 +20,11 @@ impl<T> Queue<T> {
     }
 
     pub fn pop(&mut self) -> Option<T> {
-        let target =
-            unsafe { ((self.buf as usize + self.out_pos) as *mut Option<T>).as_mut() }.unwrap();
+        let target = unsafe {
+            (((self.buf as usize) + self.out_pos * size_of::<Option<T>>()) as *mut Option<T>)
+                .as_mut()
+        }
+        .unwrap();
         match target {
             Some(_) => {
                 let mut prev_val = None;
@@ -35,12 +38,19 @@ impl<T> Queue<T> {
     }
 
     pub fn front(&self) -> &Option<T> {
-        unsafe { ((self.buf as usize + self.out_pos) as *mut Option<T>).as_ref() }.unwrap()
+        unsafe {
+            (((self.buf as usize) + self.out_pos * size_of::<Option<T>>()) as *mut Option<T>)
+                .as_ref()
+        }
+        .unwrap()
     }
 
     pub fn push(&mut self, v: T) -> Result<(), ()> {
-        let target =
-            unsafe { ((self.buf as usize + self.in_pos) as *mut Option<T>).as_mut() }.unwrap();
+        let target = unsafe {
+            (((self.buf as usize) + self.in_pos * size_of::<Option<T>>()) as *mut Option<T>)
+                .as_mut()
+        }
+        .unwrap();
         match target {
             Some(_) => Err(()),
             None => {

@@ -1,6 +1,6 @@
 use core::{
     arch::{asm, global_asm},
-    mem::transmute,
+    mem::{size_of, transmute},
     ptr::addr_of_mut,
 };
 
@@ -47,7 +47,7 @@ impl InterruptDescriptorTable {
     pub fn load(&self) {
         unsafe {
             load_idt(
-                (IDT_SIZE - 1) as u16,
+                (IDT_SIZE * size_of::<InterruptDescriptor>() - 1) as u16,
                 self.interrupt_descriptor_table.as_ptr() as u64,
             )
         };
@@ -95,6 +95,7 @@ fn notify_end_of_interrupt() {
 
 extern "x86-interrupt" fn xhci_interrupt_handler(_: *const InterruptFrame) {
     _ = push_interrupt_queue(InterruptMessage::XhciInterrupt);
+    unsafe { INTERRUPT_OCCURED = true };
     notify_end_of_interrupt();
 }
 
@@ -130,3 +131,5 @@ pub fn pop_interrupt_queue() -> Option<InterruptMessage> {
 pub fn count_interrupt_queue() -> usize {
     unsafe { INTERRUPT_QUEUE.count() }
 }
+
+pub static mut INTERRUPT_OCCURED: bool = false;
