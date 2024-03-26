@@ -1,4 +1,3 @@
-pub mod queue;
 pub mod vector2;
 
 pub fn get_unsigned_int_16s(source: u32) -> (u16, u16) {

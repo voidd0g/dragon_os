@@ -1,4 +1,4 @@
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Eq)]
 pub enum PortStatus {
     NotConnected,
     WaitingAddressed,

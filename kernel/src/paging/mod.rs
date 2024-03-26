@@ -41,7 +41,7 @@ extern "C" {
 }
 
 pub fn setup_identity_page_table_2m() {
-    unsafe { PML4_TABLE[0] = pml4_table_entry(PDP_TABLE.as_ptr() as u64) }
+    unsafe { PML4_TABLE[0] = ((PDP_TABLE.as_ptr() as u64) & 0x0000_000F_FFFF_F000) + 0x0003 }
     for i in 0..PAGE_DIRECTORY_COUNT {
         unsafe {
             PDP_TABLE[i] = ((PAGE_DIRECTORIES[i].as_ptr() as u64) & 0x0000_000F_FFFF_F000) + 0x0003
@@ -57,8 +57,4 @@ pub fn setup_identity_page_table_2m() {
     }
     let pml4_table_addr = unsafe { PML4_TABLE.as_ptr() } as u64;
     unsafe { asm!("mov cr3, rax", in("rax") pml4_table_addr) }
-}
-
-fn pml4_table_entry(addr: u64) -> u64 {
-    (addr & 0x0000_000F_FFFF_F000) + 0x0003
 }

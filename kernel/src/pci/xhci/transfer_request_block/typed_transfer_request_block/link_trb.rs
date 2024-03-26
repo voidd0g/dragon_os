@@ -7,7 +7,7 @@ pub struct LinkTrb {
     toggle_cycle_bit: bool,
 }
 impl LinkTrb {
-    pub fn new(next_address: u64, toggle_cycle_bit: bool) -> Self {
+    pub const fn new(next_address: u64, toggle_cycle_bit: bool) -> Self {
         Self {
             next_address,
             toggle_cycle_bit,

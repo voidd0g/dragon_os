@@ -1,4 +1,4 @@
-use core::{mem::size_of, ptr::addr_of};
+use core::mem::size_of;
 
 use super::{
     transfer_request_block::{TransferRequestBlock, TrbArray},
@@ -28,14 +28,19 @@ struct SegmentTableEntries<const ENTRY_COUNT: usize> {
 }
 
 impl<const ENTRY_COUNT: usize> SegmentTableEntries<ENTRY_COUNT> {
-    pub const fn new(segment_table_entries: [SegmentTableEntry; ENTRY_COUNT]) -> Self {
+    pub const fn new() -> Self {
+        const SEGMENT_TABLE_RESET_VALUE: SegmentTableEntry = SegmentTableEntry::new(0, 0);
         Self {
-            segment_table_entries,
+            segment_table_entries: [SEGMENT_TABLE_RESET_VALUE; ENTRY_COUNT],
         }
     }
 
+    pub fn set(&mut self, index: usize, value: SegmentTableEntry) {
+        self.segment_table_entries[index] = value;
+    }
+
     pub fn address(&self) -> u64 {
-        addr_of!(self.segment_table_entries) as u64
+        self.segment_table_entries.as_ptr() as u64
     }
 }
 
@@ -53,7 +58,7 @@ impl<const ARRAY_SIZE: usize, const ARRAY_COUNT: usize> TrbArrays<ARRAY_SIZE, AR
     }
 
     pub fn address(&self, index: usize) -> u64 {
-        addr_of!(self.trbs[index]) as u64
+        self.trbs[index].address() as u64
     }
 }
 
@@ -75,39 +80,54 @@ where
     [(); SEGMENT_COUNT as usize]:,
     [(); SEGMENT_SIZE as usize]:,
 {
-    pub fn new(interrupter_register_set: XhcInterrupterRegisterSet) -> Self {
-        let trb_arrays = TrbArrays::new();
-        const SEGMENT_TABLE_RESET_VALUE: SegmentTableEntry = SegmentTableEntry::new(0, 0);
-        let mut segment_table = [SEGMENT_TABLE_RESET_VALUE; SEGMENT_COUNT as usize];
-        for i in 0..SEGMENT_COUNT {
-            segment_table[i as usize] =
-                SegmentTableEntry::new(trb_arrays.address(i as usize), SEGMENT_SIZE);
-        }
+    pub const fn new(interrupter_register_set: XhcInterrupterRegisterSet) -> Self {
         Self {
-            trb_arrays,
-            segment_table: SegmentTableEntries::new(segment_table),
+            trb_arrays: TrbArrays::new(),
+            segment_table: SegmentTableEntries::new(),
             interrupter_register_set,
             cycle_bit: true,
             segment_index: 0,
         }
     }
 
-    pub fn initialize(&self) {
+    pub fn initialize(&mut self) {
+        for i in 0..SEGMENT_COUNT {
+            self.segment_table.set(
+                i as usize,
+                SegmentTableEntry::new(self.trb_arrays.address(i as usize), SEGMENT_SIZE),
+            );
+        }
         self.interrupter_register_set
             .set_event_ring_segment_table_size(SEGMENT_COUNT);
         self.interrupter_register_set
-            .set_event_ring_dequeue_pointer(self.trb_arrays.address(0));
+            .set_event_ring_dequeue_pointer(self.trb_arrays.address(0), 0);
         self.interrupter_register_set
             .set_event_ring_segment_table_base_address(self.segment_table.address());
-        self.interrupter_register_set
-            .set_interrupt_pending_and_enable();
+        self.interrupter_register_set.set_interrupt_enable();
+    }
+
+    pub fn set_interrupt_pending(&self) {
+        self.interrupter_register_set.set_interrupt_pending();
     }
 
     pub fn front(&self) -> Option<TransferRequestBlock> {
-        let dequeue_poiner =
-            self.interrupter_register_set.event_ring_dequeue_pointer() & 0xFFFF_FFFF_FFFF_FFF0;
+        let mut dequeue_poiner = (self.interrupter_register_set.event_ring_dequeue_pointer()
+            & 0xFFFF_FFFF_FFFF_FFF0)
+            + size_of::<TransferRequestBlock>() as u64;
+        let mut cycle_bit = self.cycle_bit;
+        if dequeue_poiner
+            == self.trb_arrays.address(self.segment_index)
+                + (size_of::<TransferRequestBlock>() * SEGMENT_SIZE as usize) as u64
+        {
+            let mut segment_index = self.segment_index + 1;
+            if segment_index == SEGMENT_COUNT as usize {
+                segment_index = 0;
+                cycle_bit = !self.cycle_bit;
+            }
+            dequeue_poiner = self.trb_arrays.address(segment_index);
+        }
         let front = unsafe { (dequeue_poiner as *const TransferRequestBlock).read() };
-        if front.cycle_bit() == self.cycle_bit {
+        if front.cycle_bit() == cycle_bit {
             Some(front)
         } else {
             None
@@ -115,25 +135,24 @@ where
     }
 
     pub fn pop(&mut self) -> Option<TransferRequestBlock> {
-        let dequeue_poiner =
-            self.interrupter_register_set.event_ring_dequeue_pointer() & 0xFFFF_FFFF_FFFF_FFF0;
+        let mut dequeue_poiner = (self.interrupter_register_set.event_ring_dequeue_pointer()
+            & 0xFFFF_FFFF_FFFF_FFF0)
+            + size_of::<TransferRequestBlock>() as u64;
+        if dequeue_poiner
+            == self.trb_arrays.address(self.segment_index)
+                + (size_of::<TransferRequestBlock>() * SEGMENT_SIZE as usize) as u64
+        {
+            self.segment_index += 1;
+            if self.segment_index == SEGMENT_COUNT as usize {
+                self.segment_index = 0;
+                self.cycle_bit = !self.cycle_bit;
+            }
+            dequeue_poiner = self.trb_arrays.address(self.segment_index);
+        }
         let front = unsafe { (dequeue_poiner as *const TransferRequestBlock).read() };
         if front.cycle_bit() == self.cycle_bit {
-            let mut next_dequeue_poiner = dequeue_poiner + size_of::<TransferRequestBlock>() as u64;
-            if next_dequeue_poiner
-                == self.trb_arrays.address(self.segment_index)
-                    + (size_of::<TransferRequestBlock>() * SEGMENT_SIZE as usize) as u64
-            {
-                self.segment_index += 1;
-                if self.segment_index == SEGMENT_COUNT as usize {
-                    self.segment_index = 0;
-                    self.cycle_bit = !self.cycle_bit;
-                }
-                next_dequeue_poiner = self.trb_arrays.address(self.segment_index);
-            }
             self.interrupter_register_set
-                .set_event_ring_dequeue_pointer(next_dequeue_poiner);
-
+                .set_event_ring_dequeue_pointer(dequeue_poiner, self.segment_index as u16);
             Some(front)
         } else {
             None

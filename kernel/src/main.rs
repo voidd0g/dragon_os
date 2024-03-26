@@ -29,13 +29,18 @@ use interrupt::pop_interrupt_queue;
 
 use crate::{
     interrupt::{
-        interrupt_vector::INTERRUPT_VECTOR_XHCI, setup_interrupt_descriptor_table, InterruptMessage, INTERRUPT_OCCURED,
+        interrupt_vector::{
+            INTERRUPT_VECTOR_XHCI_SLOT_0, INTERRUPT_VECTOR_XHCI_SLOT_1,
+            INTERRUPT_VECTOR_XHCI_SLOT_2, INTERRUPT_VECTOR_XHCI_SLOT_3,
+            XHCI_HOST_CONTROLLER_MAX_COUNT,
+        },
+        setup_interrupt_descriptor_table, InterruptMessage,
     },
     memory_manager::BitmapMemoryManager,
     paging::setup_identity_page_table_2m,
     pci::{
         local_apic::local_apic_id, msi_delivery_mode::MSI_DELIVERY_MODE_FIXED, xhci::XhcDevice,
-        BusScanner,
+        BusScanner, PciDevice,
     },
     pixel_writer::{draw_rect::DrawRect, pixel_color::PixelColor},
     pointer::PointerWriter,
@@ -213,155 +218,170 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     const XHCI_INTERFACE: u8 = 0x30;
     const INTEL_VENDOR_ID: u16 = 0x8086;
 
-    let mut xhci_found = None;
+    const XHCIS_FOUND_RESET_VALUE: Option<&PciDevice> = None;
+    let mut xhcis_found = [XHCIS_FOUND_RESET_VALUE; XHCI_HOST_CONTROLLER_MAX_COUNT];
+    let mut xhci_found_count = 0;
+
     for device in bus_scanner.devices_found() {
         let class_codes = device.class_codes();
         if class_codes.base_class() == XHCI_BASE_CLASS
             && class_codes.sub_class() == XHCI_SUB_CLASS
             && class_codes.interface() == XHCI_INTERFACE
         {
-            xhci_found = Some(device);
-            if device.vendor_id() == INTEL_VENDOR_ID {
-                break;
+            if xhci_found_count < XHCI_HOST_CONTROLLER_MAX_COUNT {
+                xhcis_found[xhci_found_count] = Some(device);
+                xhci_found_count += 1;
             }
         }
     }
 
-    let xhci_found = match xhci_found {
-        Some(xhci_found) => xhci_found,
-        None => {
-            let _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, height),
-                [b"No xHC device was found.".to_iter_str(IterStrFormat::none())]
-            );
-            end()
-        }
-    };
-
-    match output_string!(
-        services,
-        PixelColor::new(128, 0, 0),
-        Vector2::new(0, height),
-        [
-            xhci_found.bus().to_iter_str(IterStrFormat::none()),
-            b".".to_iter_str(IterStrFormat::none()),
-            xhci_found.device().to_iter_str(IterStrFormat::none()),
-            b".".to_iter_str(IterStrFormat::none()),
-            xhci_found.function().to_iter_str(IterStrFormat::none()),
-            b" was xHC device.".to_iter_str(IterStrFormat::none()),
-        ]
-    ) {
-        Ok(()) => (),
-        Err(()) => end(),
-    };
-    height += FONT_HEIGHT;
-    height %= frame_buffer_config.vertical_resolution();
-
-    if xhci_found.vendor_id() == INTEL_VENDOR_ID {
-        const EHCI_BASE_CLASS: u8 = 0x0C;
-        const EHCI_SUB_CLASS: u8 = 0x03;
-        const EHCI_INTERFACE: u8 = 0x20;
-        for device in bus_scanner.devices_found() {
-            let class_codes = device.class_codes();
-            if class_codes.base_class() == EHCI_BASE_CLASS
-                && class_codes.sub_class() == EHCI_SUB_CLASS
-                && class_codes.interface() == EHCI_INTERFACE
-                && device.vendor_id() == INTEL_VENDOR_ID
-            {
-                xhci_found.enable_super_speed();
-                xhci_found.switch_ehci_to_xhci();
-
-                break;
-            }
-        }
+    if xhci_found_count == 0 {
+        let _ = output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, height),
+            [b"No xHC device was found.".to_iter_str(IterStrFormat::none())]
+        );
+        end()
     }
 
     setup_interrupt_descriptor_table();
 
-    let xhci_mmio_base = xhci_found.base_address_register0();
+    const XHC_DEVICES_RESET_VALUE: Option<XhcDevice> = None;
+    let mut xhc_devices = [XHC_DEVICES_RESET_VALUE; XHCI_HOST_CONTROLLER_MAX_COUNT];
 
-    match output_string!(
-        services,
-        PixelColor::new(128, 0, 0),
-        Vector2::new(0, height),
-        [
-            b"xHCI MMIO base address is ".to_iter_str(IterStrFormat::none()),
-            xhci_mmio_base.to_iter_str(IterStrFormat::new(
-                Some(Radix::Hexadecimal),
-                Some(true),
-                Some(Padding::new(b'0', 16))
-            )),
-            b".".to_iter_str(IterStrFormat::none()),
-        ]
-    ) {
-        Ok(()) => (),
-        Err(()) => end(),
-    };
-    height += FONT_HEIGHT;
-    height %= frame_buffer_config.vertical_resolution();
+    for i in 0..xhci_found_count {
+        let xhci_found = xhcis_found[i].unwrap();
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, height),
+            [
+                b"Processing xHC device \"".to_iter_str(IterStrFormat::none()),
+                xhci_found.bus().to_iter_str(IterStrFormat::none()),
+                b".".to_iter_str(IterStrFormat::none()),
+                xhci_found.device().to_iter_str(IterStrFormat::none()),
+                b".".to_iter_str(IterStrFormat::none()),
+                xhci_found.function().to_iter_str(IterStrFormat::none()),
+                b"\".".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => end(),
+        };
+        height += FONT_HEIGHT;
+        height %= frame_buffer_config.vertical_resolution();
 
-    let bsp_local_apic_id = local_apic_id();
-    match xhci_found.configure_msi_fixed_destination(
-        bsp_local_apic_id,
-        true,
-        true,
-        MSI_DELIVERY_MODE_FIXED,
-        INTERRUPT_VECTOR_XHCI,
-        0,
-    ) {
-        Ok(()) => (),
-        Err(()) => {
-            _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, height),
-                [b"Failed to set bsp local apic id to msi config."
-                    .to_iter_str(IterStrFormat::none())]
-            );
-            end()
+        if xhci_found.vendor_id() == INTEL_VENDOR_ID {
+            const EHCI_BASE_CLASS: u8 = 0x0C;
+            const EHCI_SUB_CLASS: u8 = 0x03;
+            const EHCI_INTERFACE: u8 = 0x20;
+            for device in bus_scanner.devices_found() {
+                let class_codes = device.class_codes();
+                if class_codes.base_class() == EHCI_BASE_CLASS
+                    && class_codes.sub_class() == EHCI_SUB_CLASS
+                    && class_codes.interface() == EHCI_INTERFACE
+                    && device.vendor_id() == INTEL_VENDOR_ID
+                {
+                    xhci_found.enable_super_speed();
+                    xhci_found.switch_ehci_to_xhci();
+
+                    break;
+                }
+            }
         }
-    }
 
-    let xhc_device = XhcDevice::new(xhci_mmio_base);
+        let xhci_mmio_base = xhci_found.base_address_register0();
 
-    match xhc_device.initialize(&services, &mut height) {
-        Ok(()) => (),
-        Err(()) => {
-            _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, height),
-                [b"Failed to initialize xhc device.".to_iter_str(IterStrFormat::none())]
-            );
-            end()
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, height),
+            [
+                b"xHCI MMIO base address is ".to_iter_str(IterStrFormat::none()),
+                xhci_mmio_base.to_iter_str(IterStrFormat::new(
+                    Some(Radix::Hexadecimal),
+                    Some(true),
+                    Some(Padding::new(b'0', 16))
+                )),
+                b".".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => end(),
+        };
+        height += FONT_HEIGHT;
+        height %= frame_buffer_config.vertical_resolution();
+
+        let bsp_local_apic_id = local_apic_id();
+        match xhci_found.configure_msi_fixed_destination(
+            bsp_local_apic_id,
+            true,
+            true,
+            MSI_DELIVERY_MODE_FIXED,
+            match i {
+                0 => INTERRUPT_VECTOR_XHCI_SLOT_0,
+                1 => INTERRUPT_VECTOR_XHCI_SLOT_1,
+                2 => INTERRUPT_VECTOR_XHCI_SLOT_2,
+                3 => INTERRUPT_VECTOR_XHCI_SLOT_3,
+                _ => INTERRUPT_VECTOR_XHCI_SLOT_0,
+            },
+            0,
+        ) {
+            Ok(()) => (),
+            Err(()) => {
+                _ = output_string!(
+                    services,
+                    PixelColor::new(128, 0, 0),
+                    Vector2::new(0, height),
+                    [b"Failed to set bsp local apic id to msi config."
+                        .to_iter_str(IterStrFormat::none())]
+                );
+                end()
+            }
         }
-    }
 
-    match xhc_device.run(&services, &mut height) {
-        Ok(()) => (),
-        Err(()) => {
-            _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, height),
-                [b"Failed to run usb device.".to_iter_str(IterStrFormat::none())]
-            );
-            end()
+        let xhc_device = XhcDevice::new(xhci_mmio_base);
+        xhc_devices[i] = Some(xhc_device);
+        let xhc_device = xhc_devices[i].as_mut().unwrap();
+
+        match xhc_device.initialize(&services, &mut height) {
+            Ok(()) => (),
+            Err(()) => {
+                _ = output_string!(
+                    services,
+                    PixelColor::new(128, 0, 0),
+                    Vector2::new(0, height),
+                    [b"Failed to initialize xhc device.".to_iter_str(IterStrFormat::none())]
+                );
+                end()
+            }
         }
-    }
 
-    match xhc_device.reset_ports(&services, &mut height) {
-        Ok(()) => (),
-        Err(()) => {
-            _ = output_string!(
-                services,
-                PixelColor::new(128, 0, 0),
-                Vector2::new(0, height),
-                [b"Failed to reset usb ports.".to_iter_str(IterStrFormat::none())]
-            );
-            end()
+        match xhc_device.run(&services, &mut height) {
+            Ok(()) => (),
+            Err(()) => {
+                _ = output_string!(
+                    services,
+                    PixelColor::new(128, 0, 0),
+                    Vector2::new(0, height),
+                    [b"Failed to run usb device.".to_iter_str(IterStrFormat::none())]
+                );
+                end()
+            }
+        }
+
+        match xhc_device.reset_ports(&services, &mut height) {
+            Ok(()) => (),
+            Err(()) => {
+                _ = output_string!(
+                    services,
+                    PixelColor::new(128, 0, 0),
+                    Vector2::new(0, height),
+                    [b"Failed to reset usb ports.".to_iter_str(IterStrFormat::none())]
+                );
+                end()
+            }
         }
     }
 
@@ -380,20 +400,42 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
             end()
         }
     }
-
-    loop {
-        unsafe {
-            asm!("cli");
-        }
-        if unsafe { INTERRUPT_OCCURED } {
+    
+    match services.draw_services().put_pixels(DrawRect::new(
+        PixelColor::new(0, 255, 128),
+        Vector2::new(0, 0),
+        Vector2::new(
+            frame_buffer_config.horizontal_resolution(),
+            frame_buffer_config.vertical_resolution(),
+        ),
+    )) {
+        Ok(()) => (),
+        Err(()) => {
             _ = output_string!(
                 services,
                 PixelColor::new(128, 0, 0),
                 Vector2::new(0, height),
-                [b"Interrupt occured.".to_iter_str(IterStrFormat::none())]
+                [b"Failed to draw background rect.".to_iter_str(IterStrFormat::none())]
             );
-            unsafe { INTERRUPT_OCCURED = false };
+            end()
         }
+    }
+    height = 0;
+    loop {
+        unsafe {
+            asm!("cli");
+        }
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, height),
+            [b"Check for interrupt queue.".to_iter_str(IterStrFormat::none()),]
+        ) {
+            Ok(()) => (),
+            Err(()) => end(),
+        };
+        height += FONT_HEIGHT;
+        height %= frame_buffer_config.vertical_resolution();
         let popped = pop_interrupt_queue();
         match popped {
             Some(v) => {
@@ -401,18 +443,39 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
                     asm!("sti");
                 }
                 match v {
-                    InterruptMessage::XhciInterrupt => {
+                    InterruptMessage::XhciInterrupt(index) => {
                         match output_string!(
                             services,
                             PixelColor::new(128, 0, 0),
                             Vector2::new(0, height),
-                            [b"xHCI interrupt caught.".to_iter_str(IterStrFormat::none()),]
+                            [
+                                b"xHCI interrupt index ".to_iter_str(IterStrFormat::none()),
+                                index.to_iter_str(IterStrFormat::none()),
+                                b" caught.".to_iter_str(IterStrFormat::none()),
+                            ]
                         ) {
                             Ok(()) => (),
                             Err(()) => end(),
                         };
                         height += FONT_HEIGHT;
                         height %= frame_buffer_config.vertical_resolution();
+                        match xhc_devices[index]
+                            .as_mut()
+                            .unwrap()
+                            .process_events(&services, &mut height)
+                        {
+                            Ok(()) => (),
+                            Err(()) => {
+                                _ = output_string!(
+                                    services,
+                                    PixelColor::new(128, 0, 0),
+                                    Vector2::new(0, height),
+                                    [b"Failed to process event."
+                                        .to_iter_str(IterStrFormat::none())]
+                                );
+                                end()
+                            }
+                        }
                     }
                 }
             }

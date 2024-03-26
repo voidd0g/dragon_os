@@ -164,7 +164,7 @@ macro_rules! output_string {
 	};
 }
 
-pub fn put_pixel(
+fn put_pixel(
     pixels_per_scan_line: u32,
     pixel_format: EfiGraphicsPixelFormat,
     frame_buffer: &mut [u8],
@@ -214,7 +214,7 @@ pub fn put_pixel(
     }
 }
 
-pub fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(
+fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(
     pixels_per_scan_line: u32,
     pixel_format: EfiGraphicsPixelFormat,
     frame_buffer: &mut [u8],

@@ -5,7 +5,14 @@ pub mod xhci;
 
 use core::arch::asm;
 
-use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
+use common::iter_str::{IterStrFormat, Padding, ToIterStr};
+
+use crate::{
+    output_string,
+    pixel_writer::pixel_color::PixelColor,
+    services::Services,
+    util::{get_unsigned_int_16s, get_unsigned_int_8s, vector2::Vector2},
+};
 
 use self::pci_capability_id::PCI_CAPABILITY_ID_MSI;
 
@@ -110,7 +117,7 @@ fn write_capabilities_register(
     bus: u8,
     device: u8,
     function: u8,
-    poinetr: u8,
+    pointer: u8,
     offset: u8,
     value: u32,
 ) {
@@ -118,7 +125,7 @@ fn write_capabilities_register(
         bus,
         device,
         function,
-        poinetr + offset,
+        pointer + offset,
     ));
     write_config_data(value)
 }
@@ -343,7 +350,7 @@ impl PciDevice {
             address,
             0x00,
         ));
-        let is_64_bit = message_control & 0x40 != 0;
+        let is_64_bit = message_control & 0x80 != 0;
         let multiple_message_capable = (message_control & 0x0E) >> 1;
         write_capabilities_register(
             self.bus,
@@ -352,7 +359,7 @@ impl PciDevice {
             address,
             0x00,
             header as u32
-                + (((message_control & 0xFF_8E)
+                + ((((message_control & 0xFF_8E)
                     + ((if multiple_message_capable < num_vector_exponent {
                         multiple_message_capable
                     } else {
@@ -360,7 +367,7 @@ impl PciDevice {
                     } & 0x7)
                         << 4)
                     + 1) as u32)
-                << 16,
+                    << 16),
         );
         write_capabilities_register(
             self.bus,
@@ -387,7 +394,7 @@ impl PciDevice {
         );
     }
 
-    pub fn configure_msi(
+    fn configure_msi(
         &self,
         message_address: u32,
         message_data: u16,

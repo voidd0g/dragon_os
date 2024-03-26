@@ -1,12 +1,11 @@
 pub mod context;
 pub mod device;
 pub mod event_ring;
-pub mod port;
 pub mod port_status;
 pub mod software_ring;
 pub mod transfer_request_block;
 
-use common::iter_str::{IterStrFormat, ToIterStr};
+use common::iter_str::{IterStrFormat, Padding, Radix, ToIterStr};
 
 use crate::{
     font::font_writer::FONT_HEIGHT,
@@ -21,7 +20,10 @@ use self::{
     event_ring::EventRingManagerWithFixedSize,
     port_status::PortStatus,
     software_ring::SoftwareRingManager,
-    transfer_request_block::typed_transfer_request_block::TypedTransferRequestBlock,
+    transfer_request_block::typed_transfer_request_block::{
+        enable_slot_command_trb::EnableSlotCommandTrb, IncomingTypedTransferRequestBlock,
+        OutgoingTypedTransferRequestBlock,
+    },
 };
 
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
@@ -41,6 +43,7 @@ pub struct XhcDevice {
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT,
     >,
     runtime_registers: XhcRuntimeRegisters,
+    doorbell_registers: XhcDoorbellRegisters,
     ports_status: [PortStatus; MAX_PORT_POSSIBLE as usize],
     device_contexts: DeviceContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
     input_contexts: InputContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
@@ -51,6 +54,8 @@ impl XhcDevice {
         let capability_registers = XhcCapabilityRegisters::new(base_address);
         let operational_registers_offset = capability_registers.capability_register_length();
         let runtime_registers_offset = capability_registers.runtime_register_space_offset();
+        let doorbell_registers_offset = capability_registers.doorbell_offset();
+        const PORTS_STATUS_RESET_VALUE: PortStatus = PortStatus::NotConnected;
 
         Self {
             capability_registers,
@@ -68,13 +73,16 @@ impl XhcDevice {
             runtime_registers: XhcRuntimeRegisters::new(
                 base_address + runtime_registers_offset as u64,
             ),
-            ports_status: [PortStatus::NotConnected; MAX_PORT_POSSIBLE as usize],
+            doorbell_registers: XhcDoorbellRegisters::new(
+                base_address + doorbell_registers_offset as u64,
+            ),
+            ports_status: [PORTS_STATUS_RESET_VALUE; MAX_PORT_POSSIBLE as usize],
             device_contexts: DeviceContexts::new(),
             input_contexts: InputContexts::new(),
         }
     }
 
-    pub fn initialize(&self, services: &Services, height: &mut u32) -> Result<(), ()> {
+    pub fn initialize(&mut self, services: &Services, height: &mut u32) -> Result<(), ()> {
         match output_string!(
             services,
             PixelColor::new(128, 0, 0),
@@ -204,6 +212,7 @@ impl XhcDevice {
         *height += FONT_HEIGHT;
 
         self.primary_interrupter_event_ring.initialize();
+        self.primary_interrupter_event_ring.set_interrupt_pending();
 
         self.operational_registers.usb_command_interrupter_enable();
 
@@ -277,7 +286,23 @@ impl XhcDevice {
             != 0
     }
 
-    fn reset_port(&self, index: u8, services: &Services, height: &mut u32) -> Result<(), ()> {
+    fn reset_port(&mut self, index: u8, services: &Services, height: &mut u32) -> Result<(), ()> {
+        if self.ports_status[index as usize - 1] != PortStatus::NotConnected {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, *height),
+                [
+                    index.to_iter_str(IterStrFormat::none()),
+                    b"-th usb port is on status other than NotConnected."
+                        .to_iter_str(IterStrFormat::none()),
+                ]
+            );
+            *height += FONT_HEIGHT;
+            return Err(());
+        }
+
+        self.ports_status[index as usize - 1] = PortStatus::ResettingPort;
         match output_string!(
             services,
             PixelColor::new(128, 0, 0),
@@ -317,8 +342,22 @@ impl XhcDevice {
         }
     }
 
-    pub fn reset_ports(&self, services: &Services, height: &mut u32) -> Result<(), ()> {
+    pub fn reset_ports(&mut self, services: &Services, height: &mut u32) -> Result<(), ()> {
         let port_count = self.max_ports();
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Maximum ".to_iter_str(IterStrFormat::none()),
+                port_count.to_iter_str(IterStrFormat::none()),
+                b" ports.".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
         for i in 1..=port_count {
             if self.is_port_connected(i) {
                 match output_string!(
@@ -351,15 +390,128 @@ impl XhcDevice {
         .3
     }
 
-    pub fn process_events(&mut self) -> Result<(), ()> {
+    fn enable_slot(
+        &mut self,
+        services: &Services,
+        height: &mut u32,
+        port_id: u8,
+    ) -> Result<(), ()> {
+        if self.ports_status[port_id as usize - 1] != PortStatus::ResettingPort {
+            _ = output_string!(
+                services,
+                PixelColor::new(128, 0, 0),
+                Vector2::new(0, *height),
+                [
+                    port_id.to_iter_str(IterStrFormat::none()),
+                    b"-th usb port is on status other than ResettingPort."
+                        .to_iter_str(IterStrFormat::none()),
+                ]
+            );
+            *height += FONT_HEIGHT;
+            return Err(());
+        }
+        _ = output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Enabling slot for".to_iter_str(IterStrFormat::none()),
+                port_id.to_iter_str(IterStrFormat::none()),
+                b"-th usb port.".to_iter_str(IterStrFormat::none()),
+            ]
+        );
+        *height += FONT_HEIGHT;
+        self.ports_status[port_id as usize - 1] = PortStatus::EnablingSlot;
+
+        self.clear_port_reset_change(port_id);
+
+        self.command_ring.push(
+            OutgoingTypedTransferRequestBlock::EnableSlotCommandTrb(EnableSlotCommandTrb::new())
+                .into_transfer_request_block(),
+        );
+
+        self.doorbell_registers.set(0, 0);
+
+        Ok(())
+    }
+
+    fn clear_port_reset_change(&self, port_id: u8) {
+        let port_status_and_control_register = self
+            .operational_registers
+            .port_status_and_control_register(port_id);
+        self.operational_registers
+            .set_port_status_and_control_register(
+                port_id,
+                (port_status_and_control_register & 0x0E01_C3E0) + 0x0020_0000,
+            );
+    }
+
+    pub fn process_events(&mut self, services: &Services, height: &mut u32) -> Result<(), ()> {
+        let mut processed = false;
         'a: loop {
             match self.primary_interrupter_event_ring.pop() {
                 Some(event) => {
-                    match TypedTransferRequestBlock::from_transfer_request_block(event) {
-                        _ => break 'a Err(()),
+                    match IncomingTypedTransferRequestBlock::from_transfer_request_block(event) {
+                        Ok(trb) => {
+                            match trb {
+                                IncomingTypedTransferRequestBlock::TransferEventTrb(_) => todo!(),
+                                IncomingTypedTransferRequestBlock::PortStatusChangeEventTrb(
+                                    trb,
+                                ) => match self.enable_slot(services, height, trb.port_id()) {
+                                    Ok(()) => (),
+                                    Err(()) => {
+                                        _ = output_string!(
+                                            services,
+                                            PixelColor::new(128, 0, 0),
+                                            Vector2::new(0, *height),
+                                            [
+                                                b"Failed to enable slot for "
+                                                    .to_iter_str(IterStrFormat::none()),
+                                                trb.port_id().to_iter_str(IterStrFormat::none()),
+                                                b"-th usb port is connected."
+                                                    .to_iter_str(IterStrFormat::none()),
+                                            ]
+                                        );
+                                        *height += FONT_HEIGHT;
+                                        return Err(());
+                                    }
+                                },
+                            }
+                            match output_string!(
+                                services,
+                                PixelColor::new(128, 0, 0),
+                                Vector2::new(0, *height),
+                                [
+                                    b"Event correctly processed."
+                                        .to_iter_str(IterStrFormat::none()),
+                                ]
+                            ) {
+                                Ok(()) => (),
+                                Err(()) => return Err(()),
+                            }
+                            *height += FONT_HEIGHT;
+                        }
+                        Err(()) => break 'a Err(()),
                     }
+                    processed = true;
                 }
-                None => break 'a Ok(()),
+                None => {
+                    if processed {
+                        self.primary_interrupter_event_ring.set_interrupt_pending();
+                    } else {
+                        match output_string!(
+                            services,
+                            PixelColor::new(128, 0, 0),
+                            Vector2::new(0, *height),
+                            [b"No event found.".to_iter_str(IterStrFormat::none()),]
+                        ) {
+                            Ok(()) => (),
+                            Err(()) => return Err(()),
+                        }
+                        *height += FONT_HEIGHT;
+                    }
+                    break 'a Ok(());
+                }
             }
         }
     }
@@ -469,7 +621,7 @@ impl XhcOperationalRegisters {
     }
 
     pub fn port_status_and_control_register(&self, index: u8) -> u32 {
-        unsafe { ((self.base_address + 0x400 + 0x10 * index as u64) as *const u32).read() }
+        unsafe { ((self.base_address + 0x400 + 0x10 * (index - 1) as u64) as *const u32).read() }
     }
 }
 
@@ -484,6 +636,20 @@ impl XhcRuntimeRegisters {
 
     pub fn get_interrupter_register_set(&self, index: u64) -> XhcInterrupterRegisterSet {
         XhcInterrupterRegisterSet::new(self.base_address + 0x20 + 32 * index)
+    }
+}
+
+pub struct XhcDoorbellRegisters {
+    base_address: u64,
+}
+
+impl XhcDoorbellRegisters {
+    pub const fn new(base_address: u64) -> Self {
+        Self { base_address }
+    }
+
+    pub fn set(&self, index: u8, val: u32) {
+        *unsafe { ((self.base_address + 4 * index as u64) as *mut u32).as_mut() }.unwrap() = val;
     }
 }
 
@@ -512,9 +678,14 @@ impl XhcInterrupterRegisterSet {
         unsafe { ((self.base_address + 0x18) as *const u64).read() }
     }
 
-    pub fn set_interrupt_pending_and_enable(&self) {
+    pub fn set_interrupt_enable(&self) {
         *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
-            (self.interrupter_management_register() & 0xFFFF_FFFC) + 3;
+            (self.interrupter_management_register() & 0xFFFF_FFFD) + 2;
+    }
+
+    pub fn set_interrupt_pending(&self) {
+        *unsafe { ((self.base_address + 0x00) as *mut u32).as_mut() }.unwrap() =
+            (self.interrupter_management_register() & 0xFFFF_FFFE) + 1;
     }
 
     pub fn set_event_ring_segment_table_size(&self, size: u16) {
@@ -528,8 +699,10 @@ impl XhcInterrupterRegisterSet {
             + (self.event_ring_segment_table_base_address() & 0x3F);
     }
 
-    pub fn set_event_ring_dequeue_pointer(&self, address: u64) {
-        *unsafe { ((self.base_address + 0x18) as *mut u64).as_mut() }.unwrap() =
-            (address & 0xFFFF_FFFF_FFFF_FFF0) + (self.event_ring_dequeue_pointer() & 0xF);
+    pub fn set_event_ring_dequeue_pointer(&self, address: u64, index: u16) {
+        *unsafe { ((self.base_address + 0x18) as *mut u64).as_mut() }.unwrap() = (address
+            & 0xFFFF_FFFF_FFFF_FFF0)
+            + (self.event_ring_dequeue_pointer() & 0x8)
+            + (index as u64 & 0x7);
     }
 }

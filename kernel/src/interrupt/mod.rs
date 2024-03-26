@@ -1,12 +1,18 @@
 use core::{
-    arch::{asm, global_asm},
-    mem::{size_of, transmute},
+    arch::global_asm,
+    mem::{size_of, swap},
     ptr::addr_of_mut,
 };
 
-use crate::{segment::descriptor_type::DESCRIPTOR_TYPE_INTERRUPT_GATE, util::queue::Queue};
+use crate::segment::descriptor_type::DESCRIPTOR_TYPE_INTERRUPT_GATE;
 
-use self::{interrupt_descriptor::InterruptDescriptor, interrupt_vector::INTERRUPT_VECTOR_XHCI};
+use self::{
+    interrupt_descriptor::InterruptDescriptor,
+    interrupt_vector::{
+        INTERRUPT_VECTOR_XHCI_SLOT_0, INTERRUPT_VECTOR_XHCI_SLOT_1, INTERRUPT_VECTOR_XHCI_SLOT_2,
+        INTERRUPT_VECTOR_XHCI_SLOT_3,
+    },
+};
 
 pub mod interrupt_descriptor;
 pub mod interrupt_vector;
@@ -81,8 +87,26 @@ get_cs:
 pub fn setup_interrupt_descriptor_table() {
     let idt = unsafe { addr_of_mut!(INTERRUPT_DESCRIPTOR_TABLE).as_mut() }.unwrap();
     idt.set_idt_entry(
-        INTERRUPT_VECTOR_XHCI,
-        xhci_interrupt_handler as u64,
+        INTERRUPT_VECTOR_XHCI_SLOT_0,
+        xhci_interrupt_slot_0_handler as u64,
+        DESCRIPTOR_TYPE_INTERRUPT_GATE,
+        0,
+    );
+    idt.set_idt_entry(
+        INTERRUPT_VECTOR_XHCI_SLOT_1,
+        xhci_interrupt_slot_1_handler as u64,
+        DESCRIPTOR_TYPE_INTERRUPT_GATE,
+        0,
+    );
+    idt.set_idt_entry(
+        INTERRUPT_VECTOR_XHCI_SLOT_2,
+        xhci_interrupt_slot_2_handler as u64,
+        DESCRIPTOR_TYPE_INTERRUPT_GATE,
+        0,
+    );
+    idt.set_idt_entry(
+        INTERRUPT_VECTOR_XHCI_SLOT_3,
+        xhci_interrupt_slot_3_handler as u64,
         DESCRIPTOR_TYPE_INTERRUPT_GATE,
         0,
     );
@@ -93,9 +117,20 @@ fn notify_end_of_interrupt() {
     *unsafe { (0xFEE0_00B0 as *mut u32).as_mut() }.unwrap() = 0
 }
 
-extern "x86-interrupt" fn xhci_interrupt_handler(_: *const InterruptFrame) {
-    _ = push_interrupt_queue(InterruptMessage::XhciInterrupt);
-    unsafe { INTERRUPT_OCCURED = true };
+extern "x86-interrupt" fn xhci_interrupt_slot_0_handler(_: *const InterruptFrame) {
+    _ = push_interrupt_queue(InterruptMessage::XhciInterrupt(0));
+    notify_end_of_interrupt();
+}
+extern "x86-interrupt" fn xhci_interrupt_slot_1_handler(_: *const InterruptFrame) {
+    _ = push_interrupt_queue(InterruptMessage::XhciInterrupt(1));
+    notify_end_of_interrupt();
+}
+extern "x86-interrupt" fn xhci_interrupt_slot_2_handler(_: *const InterruptFrame) {
+    _ = push_interrupt_queue(InterruptMessage::XhciInterrupt(2));
+    notify_end_of_interrupt();
+}
+extern "x86-interrupt" fn xhci_interrupt_slot_3_handler(_: *const InterruptFrame) {
+    _ = push_interrupt_queue(InterruptMessage::XhciInterrupt(3));
     notify_end_of_interrupt();
 }
 
@@ -109,15 +144,63 @@ struct InterruptFrame {
 }
 
 pub enum InterruptMessage {
-    XhciInterrupt,
+    XhciInterrupt(usize),
 }
 
-const QUEUE_BUF_INIT_VAL: Option<InterruptMessage> = None;
+struct InterruptQueue<const COUNT: usize> {
+    buf: [Option<InterruptMessage>; COUNT],
+    count: usize,
+    out_pos: usize,
+    in_pos: usize,
+}
+
+impl<const COUNT: usize> InterruptQueue<COUNT> {
+    pub const fn new() -> Self {
+        const RESET_VALUE: Option<InterruptMessage> = None;
+        Self {
+            buf: [RESET_VALUE; COUNT],
+            count: 0,
+            out_pos: 0,
+            in_pos: 0,
+        }
+    }
+
+    pub fn pop(&mut self) -> Option<InterruptMessage> {
+        match self.buf[self.out_pos] {
+            None => None,
+            Some(_) => {
+                let mut prev_val = None;
+                swap(&mut prev_val, &mut self.buf[self.out_pos]);
+                self.out_pos = (self.out_pos + 1) % COUNT;
+                self.count -= 1;
+                prev_val
+            }
+        }
+    }
+
+    pub fn front(&self) -> &Option<InterruptMessage> {
+        &self.buf[self.out_pos]
+    }
+
+    pub fn push(&mut self, v: InterruptMessage) -> Result<(), ()> {
+        match self.buf[self.in_pos] {
+            Some(_) => Err(()),
+            None => {
+                self.buf[self.in_pos] = Some(v);
+                self.in_pos = (self.in_pos + 1) % COUNT;
+                self.count += 1;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
+
 const QUEUE_BUF_SIZE: usize = 256;
-static mut QUEUE_BUF: [Option<InterruptMessage>; QUEUE_BUF_SIZE] =
-    [QUEUE_BUF_INIT_VAL; QUEUE_BUF_SIZE];
-static mut INTERRUPT_QUEUE: Queue<InterruptMessage> =
-    Queue::new(unsafe { QUEUE_BUF.as_mut_ptr() }, QUEUE_BUF_SIZE);
+static mut INTERRUPT_QUEUE: InterruptQueue<QUEUE_BUF_SIZE> = InterruptQueue::new();
 
 pub fn push_interrupt_queue(interrupt_message: InterruptMessage) -> Result<(), ()> {
     unsafe { INTERRUPT_QUEUE.push(interrupt_message) }
@@ -131,5 +214,3 @@ pub fn pop_interrupt_queue() -> Option<InterruptMessage> {
 pub fn count_interrupt_queue() -> usize {
     unsafe { INTERRUPT_QUEUE.count() }
 }
-
-pub static mut INTERRUPT_OCCURED: bool = false;

@@ -40,7 +40,7 @@ where
     }
 
     pub fn address(&self) -> u64 {
-        addr_of!(self.trbs) as u64
+        self.trbs.as_ptr() as u64
     }
 
     pub fn put_trb(&mut self, index: usize, cycle_bit: bool, mut val: TransferRequestBlock) {
