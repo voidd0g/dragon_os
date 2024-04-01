@@ -6,13 +6,13 @@ use super::{
     XhcOperationalRegisters,
 };
 
-pub struct SoftwareRingManager<const COMMAND_RING_SIZE: usize>
+pub struct SoftwareRingManager<const RING_SIZE: usize>
 where
-    [(); COMMAND_RING_SIZE]:,
+    [(); RING_SIZE]:,
 {
     cycle_bit: bool,
     writing_index: usize,
-    trbs: SoftwareRingTrbArray<COMMAND_RING_SIZE>,
+    trbs: SoftwareRingTrbArray<RING_SIZE>,
     operational_registers: XhcOperationalRegisters,
 }
 
@@ -48,9 +48,9 @@ where
     pub fn initialize(&self) {
         self.operational_registers
             .set_command_ring_control_register(
-                self.operational_registers.command_ring_control_register()
-                    & 0x30 + self.trbs.address()
-                    & 0xFFFF_FFFF_FFFF_FFC0 + if self.cycle_bit { 1 } else { 0 },
+                (self.operational_registers.command_ring_control_register() & 0x30)
+                    + (self.trbs.address() & 0xFFFF_FFFF_FFFF_FFC0)
+                    + if self.cycle_bit { 1 } else { 0 },
             );
     }
 

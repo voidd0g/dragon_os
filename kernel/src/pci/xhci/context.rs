@@ -1,11 +1,14 @@
-use core::ptr::{addr_of, addr_of_mut, slice_from_raw_parts, slice_from_raw_parts_mut};
+use core::{
+    mem::size_of,
+    ptr::{addr_of, addr_of_mut, slice_from_raw_parts, slice_from_raw_parts_mut},
+};
 
 #[repr(align(0x1000))]
 pub struct DeviceContextBaseAddressArray<const ARRAY_SIZE: usize>
 where
     [(); ARRAY_SIZE + 1]:,
 {
-    dcbaa: [usize; ARRAY_SIZE + 1],
+    dcbaa: [u64; ARRAY_SIZE + 1],
 }
 impl<const ARRAY_SIZE: usize> DeviceContextBaseAddressArray<ARRAY_SIZE>
 where
@@ -17,8 +20,12 @@ where
         }
     }
 
-    pub unsafe fn pointer(&self) -> *const [usize; ARRAY_SIZE + 1] {
-        addr_of!(self.dcbaa)
+    pub fn pointer(&self) -> *const u64 {
+        self.dcbaa.as_ptr()
+    }
+
+    pub fn register_pointer(&mut self, index: usize, pointer: u64) {
+        self.dcbaa[index] = pointer;
     }
 }
 
@@ -40,48 +47,32 @@ where
         }
     }
 
-    pub fn device_contexts_32(&'a self) -> &'a [DeviceContext32] {
-        unsafe {
-            slice_from_raw_parts(
-                addr_of!(self.contexts) as *const DeviceContext32,
-                CONTEXT_COUNT,
-            )
-            .as_ref()
-            .unwrap()
-        }
+    pub fn as_ptr_32(&self, index: usize) -> *const DeviceContext32 {
+        (self.contexts.as_ptr() as usize + index * size_of::<DeviceContext32>())
+            as *const DeviceContext32
     }
 
-    pub fn device_contexts_64(&'a self) -> &'a [DeviceContext64] {
-        unsafe {
-            slice_from_raw_parts(
-                addr_of!(self.contexts) as *const DeviceContext64,
-                CONTEXT_COUNT,
-            )
-            .as_ref()
-            .unwrap()
-        }
+    pub fn as_ptr_64(&self, index: usize) -> *const DeviceContext64 {
+        (self.contexts.as_ptr() as usize + index * size_of::<DeviceContext64>())
+            as *const DeviceContext64
     }
 
-    pub fn device_contexts_32_mut(&'a mut self) -> &'a mut [DeviceContext32] {
+    pub fn as_mut_32(&'a mut self, index: usize) -> &'a mut DeviceContext32 {
         unsafe {
-            slice_from_raw_parts_mut(
-                addr_of_mut!(self.contexts) as *mut DeviceContext32,
-                CONTEXT_COUNT,
-            )
-            .as_mut()
-            .unwrap()
+            ((self.contexts.as_ptr() as usize + index * size_of::<DeviceContext32>())
+                as *mut DeviceContext32)
+                .as_mut()
         }
+        .unwrap()
     }
 
-    pub fn device_contexts_64_mut(&'a mut self) -> &'a mut [DeviceContext64] {
+    pub fn as_mut_64(&'a mut self, index: usize) -> &'a mut DeviceContext64 {
         unsafe {
-            slice_from_raw_parts_mut(
-                addr_of_mut!(self.contexts) as *mut DeviceContext64,
-                CONTEXT_COUNT,
-            )
-            .as_mut()
-            .unwrap()
+            ((self.contexts.as_ptr() as usize + index * size_of::<DeviceContext64>())
+                as *mut DeviceContext64)
+                .as_mut()
         }
+        .unwrap()
     }
 }
 

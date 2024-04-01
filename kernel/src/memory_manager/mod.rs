@@ -51,7 +51,7 @@ impl BitmapMemoryManager {
             let end_page_uefi = (i * PAGE_FRAME_SIZE + PAGE_FRAME_SIZE - 1) / UEFI_PAGE_FRAME_SIZE;
             let mut avail = true;
             for j in start_page_uefi..(end_page_uefi + 1) {
-                if uefi_bitmap[j / u64::BITS as usize] & 1 << (j % u64::BITS as usize) == 0 {
+                if (uefi_bitmap[j / u64::BITS as usize] & (1 << (j % u64::BITS as usize))) == 0 {
                     avail = false;
                     break;
                 }
@@ -67,7 +67,7 @@ impl BitmapMemoryManager {
         let mut i = 0;
         let mut found = 0;
         while i < self.bitmap.len() * u64::BITS as usize {
-            if self.bitmap[i / u64::BITS as usize] & 1 << (i % u64::BITS as usize) == 0 {
+            if (self.bitmap[i / u64::BITS as usize] & (1 << (i % u64::BITS as usize))) == 0 {
                 found = 0;
             } else {
                 found += 1;

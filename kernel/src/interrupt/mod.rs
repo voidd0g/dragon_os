@@ -147,31 +147,31 @@ pub enum InterruptMessage {
     XhciInterrupt(usize),
 }
 
-struct InterruptQueue<const COUNT: usize> {
+pub struct FixedSizeInterruptMessageQueue<const COUNT: usize> {
     buf: [Option<InterruptMessage>; COUNT],
     count: usize,
-    out_pos: usize,
-    in_pos: usize,
+    tail: usize,
+    head: usize,
 }
 
-impl<const COUNT: usize> InterruptQueue<COUNT> {
+impl<const COUNT: usize> FixedSizeInterruptMessageQueue<COUNT> {
     pub const fn new() -> Self {
         const RESET_VALUE: Option<InterruptMessage> = None;
         Self {
             buf: [RESET_VALUE; COUNT],
             count: 0,
-            out_pos: 0,
-            in_pos: 0,
+            tail: 0,
+            head: 0,
         }
     }
 
     pub fn pop(&mut self) -> Option<InterruptMessage> {
-        match self.buf[self.out_pos] {
+        match self.buf[self.tail] {
             None => None,
             Some(_) => {
                 let mut prev_val = None;
-                swap(&mut prev_val, &mut self.buf[self.out_pos]);
-                self.out_pos = (self.out_pos + 1) % COUNT;
+                swap(&mut prev_val, &mut self.buf[self.tail]);
+                self.tail = (self.tail + 1) % COUNT;
                 self.count -= 1;
                 prev_val
             }
@@ -179,15 +179,15 @@ impl<const COUNT: usize> InterruptQueue<COUNT> {
     }
 
     pub fn front(&self) -> &Option<InterruptMessage> {
-        &self.buf[self.out_pos]
+        &self.buf[self.tail]
     }
 
     pub fn push(&mut self, v: InterruptMessage) -> Result<(), ()> {
-        match self.buf[self.in_pos] {
+        match self.buf[self.head] {
             Some(_) => Err(()),
             None => {
-                self.buf[self.in_pos] = Some(v);
-                self.in_pos = (self.in_pos + 1) % COUNT;
+                self.buf[self.head] = Some(v);
+                self.head = (self.head + 1) % COUNT;
                 self.count += 1;
                 Ok(())
             }
@@ -200,7 +200,8 @@ impl<const COUNT: usize> InterruptQueue<COUNT> {
 }
 
 const QUEUE_BUF_SIZE: usize = 256;
-static mut INTERRUPT_QUEUE: InterruptQueue<QUEUE_BUF_SIZE> = InterruptQueue::new();
+static mut INTERRUPT_QUEUE: FixedSizeInterruptMessageQueue<QUEUE_BUF_SIZE> =
+    FixedSizeInterruptMessageQueue::new();
 
 pub fn push_interrupt_queue(interrupt_message: InterruptMessage) -> Result<(), ()> {
     unsafe { INTERRUPT_QUEUE.push(interrupt_message) }

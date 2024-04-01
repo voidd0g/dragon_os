@@ -1,7 +1,5 @@
 pub mod typed_transfer_request_block;
 
-use core::ptr::addr_of;
-
 #[repr(C)]
 pub struct TransferRequestBlock {
     data: [u32; 4],
@@ -13,7 +11,7 @@ impl TransferRequestBlock {
     }
 
     pub fn cycle_bit(&self) -> bool {
-        self.data[3] & 0x1 != 0
+        (self.data[3] & 0x1) != 0
     }
 
     pub fn trb_type(&self) -> u8 {
@@ -43,11 +41,11 @@ where
         self.trbs.as_ptr() as u64
     }
 
-    pub fn put_trb(&mut self, index: usize, cycle_bit: bool, mut val: TransferRequestBlock) {
-        val.data[3] = (val.data[3] & 0xFFFF_FFFE) + if cycle_bit { 1 } else { 0 };
+    pub fn put_trb(&mut self, index: usize, cycle_bit: bool, val: TransferRequestBlock) {
         let target = &mut self.trbs[index];
         for i in 0..3 {
-            target.data[i] = val.data[i];
+            target.data[i] = val.data[i]
         }
+        target.data[3] = (val.data[3] & 0xFFFF_FFFE) + if cycle_bit { 1 } else { 0 }
     }
 }

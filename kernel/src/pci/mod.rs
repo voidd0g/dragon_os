@@ -5,14 +5,7 @@ pub mod xhci;
 
 use core::arch::asm;
 
-use common::iter_str::{IterStrFormat, Padding, ToIterStr};
-
-use crate::{
-    output_string,
-    pixel_writer::pixel_color::PixelColor,
-    services::Services,
-    util::{get_unsigned_int_16s, get_unsigned_int_8s, vector2::Vector2},
-};
+use crate::util::{get_unsigned_int_16s, get_unsigned_int_8s};
 
 use self::pci_capability_id::PCI_CAPABILITY_ID_MSI;
 
@@ -84,7 +77,7 @@ fn read_base_address_register0(bus: u8, device: u8, function: u8) -> u64 {
     } else {
         write_config_address(make_pci_config_address(bus, device, function, 0x14));
         let hi = read_config_data();
-        (lo as u64) & 0xFFFF_FFFF_FFFF_FFF0 + ((hi as u64) << 32)
+        ((lo as u64) & 0xFFFF_FFFF_FFFF_FFF0) + ((hi as u64) << 32)
     }
 }
 fn read_bus_numbers(bus: u8, device: u8, function: u8) -> u32 {
@@ -350,8 +343,8 @@ impl PciDevice {
             address,
             0x00,
         ));
-        let is_64_bit = message_control & 0x80 != 0;
-        let multiple_message_capable = (message_control & 0x0E) >> 1;
+        let is_64_bit = (message_control & 0x80) != 0;
+        let multiple_message_capable = (message_control >> 1) & 0x7;
         write_capabilities_register(
             self.bus,
             self.device,

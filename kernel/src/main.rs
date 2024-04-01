@@ -400,7 +400,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
             end()
         }
     }
-    
+
     match services.draw_services().put_pixels(DrawRect::new(
         PixelColor::new(0, 255, 128),
         Vector2::new(0, 0),
