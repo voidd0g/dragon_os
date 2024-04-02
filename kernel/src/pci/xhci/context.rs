@@ -94,48 +94,32 @@ where
         }
     }
 
-    pub fn device_contexts_32(&'a self) -> &'a [InputContext32] {
-        unsafe {
-            slice_from_raw_parts(
-                addr_of!(self.contexts) as *const InputContext32,
-                CONTEXT_COUNT,
-            )
-            .as_ref()
-            .unwrap()
-        }
+    pub fn as_ptr_32(&self, index: usize) -> *const InputContext32 {
+        (self.contexts.as_ptr() as usize + index * size_of::<InputContext32>())
+            as *const InputContext32
     }
 
-    pub fn device_contexts_64(&'a self) -> &'a [InputContext64] {
-        unsafe {
-            slice_from_raw_parts(
-                addr_of!(self.contexts) as *const InputContext64,
-                CONTEXT_COUNT,
-            )
-            .as_ref()
-            .unwrap()
-        }
+    pub fn as_ptr_64(&self, index: usize) -> *const InputContext64 {
+        (self.contexts.as_ptr() as usize + index * size_of::<InputContext64>())
+            as *const InputContext64
     }
 
-    pub fn device_contexts_32_mut(&'a mut self) -> &'a mut [InputContext32] {
+    pub fn as_mut_32(&'a mut self, index: usize) -> &'a mut InputContext32 {
         unsafe {
-            slice_from_raw_parts_mut(
-                addr_of_mut!(self.contexts) as *mut InputContext32,
-                CONTEXT_COUNT,
-            )
-            .as_mut()
-            .unwrap()
+            ((self.contexts.as_ptr() as usize + index * size_of::<InputContext32>())
+                as *mut InputContext32)
+                .as_mut()
         }
+        .unwrap()
     }
 
-    pub fn device_contexts_64_mut(&'a mut self) -> &'a mut [InputContext64] {
+    pub fn as_mut_64(&'a mut self, index: usize) -> &'a mut InputContext64 {
         unsafe {
-            slice_from_raw_parts_mut(
-                addr_of_mut!(self.contexts) as *mut InputContext64,
-                CONTEXT_COUNT,
-            )
-            .as_mut()
-            .unwrap()
+            ((self.contexts.as_ptr() as usize + index * size_of::<InputContext64>())
+                as *mut InputContext64)
+                .as_mut()
         }
+        .unwrap()
     }
 }
 
@@ -153,6 +137,28 @@ pub struct InputContext64 {
     slot_context: SlotContext64,
     endpoint_contexts: [EndpointContext64; 31],
     padding: [u8; 0x7C0],
+}
+impl InputContext64 {
+    pub fn set_enable_context(&mut self, index: usize, val: bool) {
+        self.input_control_context.set_enable_context(index, val);
+    }
+
+    pub fn set_route_string(&mut self, route_string: u32) {
+        self.slot_context.set_route_string(route_string);
+    }
+    pub fn set_speed(&mut self, speed: u8) {
+        self.slot_context.set_speed(speed);
+    }
+    pub fn set_context_entries(&mut self, count: u8) {
+        self.slot_context.set_context_entries(count);
+    }
+    pub fn set_route_hub_port_number(&mut self, port_id: u8) {
+        self.slot_context.set_route_hub_port_number(port_id);
+    }
+
+    pub fn endpoint_context_mut(&mut self, index: usize, is_direction_in: bool) -> &mut EndpointContext64 {
+        &mut self.endpoint_contexts[if index == 0 { 1 } else { if is_direction_in { index * 2 } else { index * 2 + 1 } }]
+    }
 }
 
 #[repr(C)]
@@ -184,15 +190,52 @@ pub struct EndpointContext32 {
 
 #[repr(C)]
 pub struct InputControlContext64 {
-    data: [u32; 16],
+    data: [u64; 8],
+}
+impl InputControlContext64 {
+    pub fn set_enable_context(&mut self, index: usize, val: bool) {
+        self.data[1] = if val {
+            self.data[1] | (1 << index)
+        } else {
+            self.data[1] & (!(1 << index))
+        }
+    }
 }
 
 #[repr(C)]
 pub struct SlotContext64 {
-    data: [u32; 16],
+    data: [u64; 8],
+}
+impl SlotContext64 {
+    pub fn set_route_string(&mut self, route_string: u32) {
+        self.data[0] = (self.data[0] & 0xFFFF_FFFF_FFF0_0000) + (route_string as u64 & 0xF_FFFF);
+    }
+    pub fn set_speed(&mut self, speed: u8) {
+        self.data[0] = (self.data[0] & 0xFFFF_FFFF_FF0F_FFFF) + ((speed as u64) << 20);
+    }
+    pub fn set_context_entries(&mut self, count: u8) {
+        self.data[0] = (self.data[0] & 0xFFFF_FFFF_07FF_FFFF) + ((count as u64 & 0x1F) << 27);
+    }
+    pub fn set_route_hub_port_number(&mut self, port_id: u8) {
+        self.data[0] = (self.data[1] & 0xFFFF_FFFF_FF00_FFFF) + ((port_id as u64) << 16);
+    }
 }
 
 #[repr(C)]
 pub struct EndpointContext64 {
-    data: [u32; 16],
+    data: [u64; 8],
+}
+impl EndpointContext64 {
+    pub fn set_endpoint_type(&mut self, r#type: u8) {
+        self.data[1] = (self.data[1] & 0xFFFF_FFFF_FFFF_FFC7) + ((r#type as u64 & 0x7) << 3);
+    }
+    pub fn set_max_burst_size(&mut self, size: u8) {
+        self.data[1] = (self.data[1] & 0xFFFF_FFFF_FFFF_00FF) + ((size as u64) << 8);
+    }
+    pub fn set_max_packet_size(&mut self, size: u16) {
+        self.data[1] = (self.data[1] & 0xFFFF_FFFF_0000_FFFF) + ((size as u64) << 16);
+    }
+    pub fn initialize_dequeue_cycle_state(&mut self) {
+        self.data[2] = (self.data[2] & 0xFFFF_FFFF_FFFF_FFFE) + 1;
+    }
 }

@@ -41,16 +41,16 @@ extern "C" {
 }
 
 pub fn setup_identity_page_table_2m() {
-    unsafe { PML4_TABLE[0] = ((PDP_TABLE.as_ptr() as u64) & 0x0000_000F_FFFF_F000) + 0x0003 }
+    unsafe { PML4_TABLE[0] = ((PDP_TABLE.as_ptr() as u64) & 0x0000_003F_FFFF_F000) + 0x0003 }
     for i in 0..PAGE_DIRECTORY_COUNT {
         unsafe {
-            PDP_TABLE[i] = ((PAGE_DIRECTORIES[i].as_ptr() as u64) & 0x0000_000F_FFFF_F000) + 0x0003
+            PDP_TABLE[i] = ((PAGE_DIRECTORIES[i].as_ptr() as u64) & 0x0000_003F_FFFF_F000) + 0x0003
         }
         for j in 0..PAGE_DIRECTORY_ENTRY_COUNT {
             unsafe {
                 PAGE_DIRECTORIES[i][j] = ((((i * PAGE_DIRECTORY_ENTRY_COUNT + j) as u64)
                     * PAGE_SIZE_2M)
-                    & 0x0000_000F_FFFF_F000)
+                    & 0x0000_003F_FFFF_F000)
                     + 0x0083
             }
         }

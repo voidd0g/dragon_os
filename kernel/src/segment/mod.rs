@@ -66,9 +66,9 @@ pub fn setup_segments() {
     const STACK_SEGMENT: usize = 2;
     unsafe {
         GLOBAL_DESCRIPTOR_TABLE[CODE_SEGMENT] =
-            code_segment(DESCRIPTOR_TYPE_EXECUTE_READ, 0, 0, 0x000F_FFFF);
+            code_segment(DESCRIPTOR_TYPE_EXECUTE_READ, 0, 0, 0xF_FFFF);
         GLOBAL_DESCRIPTOR_TABLE[STACK_SEGMENT] =
-            data_segment(DESCRIPTOR_TYPE_READ_WRITE, 0, 0, 0x000F_FFFF);
+            data_segment(DESCRIPTOR_TYPE_READ_WRITE, 0, 0, 0xF_FFFF);
         load_gdt(
             (GLOBAL_DESCRIPTOR_TABLE_COUNT * size_of::<SegmentDescriptor>() - 1) as u16,
             GLOBAL_DESCRIPTOR_TABLE.as_ptr() as u64,

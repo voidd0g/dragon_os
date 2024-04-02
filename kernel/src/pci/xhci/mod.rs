@@ -1,9 +1,9 @@
 pub mod context;
-pub mod device;
 pub mod event_ring;
 pub mod port_phase;
 pub mod software_ring;
 pub mod transfer_request_block;
+pub mod endpoint_type;
 
 use core::mem::swap;
 
@@ -60,7 +60,8 @@ impl PortStatus {
 }
 
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
-const COMMAND_RING_SIZE: usize = 8;
+const COMMAND_RING_SIZE: usize = 32;
+const TRANSFER_RING_SIZE: usize = 32;
 const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT: u16 = 1;
 const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE: u16 = 64;
 const MAX_PORT_POSSIBLE: u8 = 255;
@@ -74,6 +75,8 @@ pub struct XhcDevice {
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE,
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT,
     >,
+    default_control_pipe_transfer_rings:
+        [SoftwareRingManager<TRANSFER_RING_SIZE>; MAX_DEVICE_SLOTS_DESIRED as usize],
     runtime_registers: XhcRuntimeRegisters,
     doorbell_registers: XhcDoorbellRegisters,
     ports_status: [PortPhase; MAX_PORT_POSSIBLE as usize],
@@ -155,6 +158,13 @@ impl XhcDevice {
             primary_interrupter_event_ring: EventRingManagerWithFixedSize::new(
                 XhcRuntimeRegisters::new(base_address + runtime_registers_offset as u64)
                     .get_interrupter_register_set(0),
+            ),
+            default_control_pipe_transfer_rings: [(); MAX_DEVICE_SLOTS_DESIRED as usize].map(
+                |()| {
+                    SoftwareRingManager::new(XhcOperationalRegisters::new(
+                        base_address + operational_registers_offset as u64,
+                    ))
+                },
             ),
             runtime_registers: XhcRuntimeRegisters::new(
                 base_address + runtime_registers_offset as u64,
@@ -367,6 +377,14 @@ impl XhcDevice {
             .host_controller_cabability_parameters_1()
             & 0x0000_0004)
             != 0
+    }
+
+    fn get_port_speed(&self, index: u8) -> u8 {
+        (self
+            .operational_registers
+            .port_status_and_control_register(index)
+            >> 10) as u8
+            & 0xF
     }
 
     fn get_port_status(&self, index: u8) -> PortStatus {
@@ -660,8 +678,21 @@ impl XhcDevice {
                                                         *height += FONT_HEIGHT;
                                                         self.port_id_of_slot
                                                             [slot_id as usize - 1] = Some(port_id);
+                                                        let port_speed =
+                                                            self.get_port_speed(port_id);
                                                         if self.is_context_size_64() {
-                                                            let device_context0
+                                                            let input_context = self
+                                                                .input_contexts
+                                                                .as_mut_64(slot_id as usize);
+                                                            input_context
+                                                                .set_enable_context(0, true);
+                                                            input_context
+                                                                .set_enable_context(1, true);
+                                                            input_context.set_route_string(0);
+                                                            input_context.set_speed(port_speed);
+                                                            input_context.set_context_entries(1);
+                                                            input_context
+                                                                .set_route_hub_port_number(port_id);
                                                             self.device_context_base_address_array
                                                                 .register_pointer(
                                                                     slot_id as usize,
