@@ -1,13 +1,15 @@
 pub mod context;
+pub mod endpoint_type;
 pub mod event_ring;
 pub mod port_phase;
+pub mod port_speed;
 pub mod software_ring;
 pub mod transfer_request_block;
-pub mod endpoint_type;
+pub mod usb;
 
 use core::mem::swap;
 
-use common::iter_str::{IterStrFormat, Padding, Radix, ToIterStr};
+use common::iter_str::{IterStrFormat, ToIterStr};
 
 use crate::{
     font::font_writer::FONT_HEIGHT,
@@ -19,11 +21,14 @@ use crate::{
 
 use self::{
     context::{DeviceContextBaseAddressArray, DeviceContexts, InputContexts},
+    endpoint_type::ENDPOINT_TYPE_CONTROL_BIDIRECTIONAL,
     event_ring::EventRingManagerWithFixedSize,
     port_phase::PortPhase,
+    port_speed::{PORT_SPEED_HIGH_SPEED, PORT_SPEED_SUPER_SPEED},
     software_ring::SoftwareRingManager,
     transfer_request_block::{
         typed_transfer_request_block::{
+            address_device_command_trb::AddressDeviceCommandTrb,
             command_completion_event_trb::COMMAND_COMPLETION_CODE_SUCCESS,
             disable_slot_command_trb::DisableSlotCommandTrb,
             enable_slot_command_trb::EnableSlotCommandTrb, IncomingTypedTransferRequestBlock,
@@ -32,6 +37,7 @@ use self::{
         },
         TransferRequestBlock,
     },
+    usb::device::Device,
 };
 
 struct PortStatus {
@@ -83,6 +89,7 @@ pub struct XhcDevice {
     device_contexts: DeviceContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
     input_contexts: InputContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
     port_id_of_slot: [Option<u8>; MAX_DEVICE_SLOTS_DESIRED as usize],
+    device_of_slot: [Option<Device>; MAX_DEVICE_SLOTS_DESIRED as usize],
     ports_queue_waiting_for_slot: FixedSizePortQueue<{ MAX_PORT_POSSIBLE as usize }>,
 }
 
@@ -145,6 +152,10 @@ impl XhcDevice {
         let runtime_registers_offset = capability_registers.runtime_register_space_offset();
         let doorbell_registers_offset = capability_registers.doorbell_offset();
         const PORTS_STATUS_RESET_VALUE: PortPhase = PortPhase::NotConnected;
+        const DEFAULT_CONTROL_PIPE_TRANSFER_RING_RESET_VALUE: SoftwareRingManager<
+            TRANSFER_RING_SIZE,
+        > = SoftwareRingManager::new();
+        const DEVICE_OF_SLOT_RESET_VALUE: Option<Device> = None;
 
         Self {
             capability_registers,
@@ -152,20 +163,13 @@ impl XhcDevice {
                 base_address + operational_registers_offset as u64,
             ),
             device_context_base_address_array: DeviceContextBaseAddressArray::new(),
-            command_ring: SoftwareRingManager::new(XhcOperationalRegisters::new(
-                base_address + operational_registers_offset as u64,
-            )),
+            command_ring: SoftwareRingManager::new(),
             primary_interrupter_event_ring: EventRingManagerWithFixedSize::new(
                 XhcRuntimeRegisters::new(base_address + runtime_registers_offset as u64)
                     .get_interrupter_register_set(0),
             ),
-            default_control_pipe_transfer_rings: [(); MAX_DEVICE_SLOTS_DESIRED as usize].map(
-                |()| {
-                    SoftwareRingManager::new(XhcOperationalRegisters::new(
-                        base_address + operational_registers_offset as u64,
-                    ))
-                },
-            ),
+            default_control_pipe_transfer_rings: [DEFAULT_CONTROL_PIPE_TRANSFER_RING_RESET_VALUE;
+                MAX_DEVICE_SLOTS_DESIRED as usize],
             runtime_registers: XhcRuntimeRegisters::new(
                 base_address + runtime_registers_offset as u64,
             ),
@@ -176,6 +180,7 @@ impl XhcDevice {
             device_contexts: DeviceContexts::new(),
             input_contexts: InputContexts::new(),
             port_id_of_slot: [None; MAX_DEVICE_SLOTS_DESIRED as usize],
+            device_of_slot: [DEVICE_OF_SLOT_RESET_VALUE; MAX_DEVICE_SLOTS_DESIRED as usize],
             ports_queue_waiting_for_slot: FixedSizePortQueue::new(),
         }
     }
@@ -297,7 +302,12 @@ impl XhcDevice {
             Err(()) => return Err(()),
         }
         *height += FONT_HEIGHT;
-        self.command_ring.initialize();
+        self.operational_registers
+            .set_command_ring_control_register(
+                (self.operational_registers.command_ring_control_register() & 0x30)
+                    + (self.command_ring.initial_dequeue_pointer() & 0xFFFF_FFFF_FFFF_FFC0)
+                    + 1,
+            );
 
         match output_string!(
             services,
@@ -597,6 +607,79 @@ impl XhcDevice {
         Ok(())
     }
 
+    fn address_device(
+        &mut self,
+        slot_id: u8,
+        port_id: u8,
+        services: &Services,
+        height: &mut u32,
+    ) -> Result<(), ()> {
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Successflly enabled ".to_iter_str(IterStrFormat::none()),
+                slot_id.to_iter_str(IterStrFormat::none()),
+                b"-th device slot for ".to_iter_str(IterStrFormat::none()),
+                port_id.to_iter_str(IterStrFormat::none()),
+                b"-th usb port.".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
+        self.port_id_of_slot[slot_id as usize - 1] = Some(port_id);
+        let port_speed = self.get_port_speed(port_id);
+        let max_packet_size = self.get_max_packet_size(port_id);
+        if self.is_context_size_64() {
+            let input_context = self.input_contexts.as_mut_64(slot_id as usize);
+            input_context.set_enable_context(0, true);
+            input_context.set_enable_context(1, true);
+            input_context.set_route_string(0);
+            input_context.set_speed(port_speed);
+            input_context.set_context_entries(1);
+            input_context.set_route_hub_port_number(port_id);
+            let default_control_pipe_endpoint_context = input_context.endpoint_context_mut(0, true);
+            default_control_pipe_endpoint_context
+                .set_endpoint_type(ENDPOINT_TYPE_CONTROL_BIDIRECTIONAL);
+            default_control_pipe_endpoint_context.set_max_packet_size(max_packet_size);
+            default_control_pipe_endpoint_context.set_max_burst_size(0);
+            default_control_pipe_endpoint_context.initialize_dequeue_cycle_state();
+            default_control_pipe_endpoint_context.set_dequeue_pointer(
+                self.default_control_pipe_transfer_rings[slot_id as usize]
+                    .initial_dequeue_pointer(),
+            );
+            default_control_pipe_endpoint_context.set_interval(0);
+            default_control_pipe_endpoint_context.set_max_primary_streams(0);
+            default_control_pipe_endpoint_context.set_mult(0);
+            default_control_pipe_endpoint_context.set_error_count(3);
+            self.device_context_base_address_array.register_pointer(
+                slot_id as usize,
+                self.device_contexts.as_ptr_64(slot_id as usize) as u64,
+            );
+
+            self.command_ring.push(
+                OutgoingTypedTransferRequestBlock::AddressDeviceCommandTrb(
+                    AddressDeviceCommandTrb::new(
+                        self.input_contexts.as_ptr_64(slot_id as usize) as u64,
+                        slot_id,
+                    ),
+                )
+                .into_transfer_request_block(),
+            );
+
+            self.doorbell_registers.set(0, 0);
+        } else {
+            self.device_context_base_address_array.register_pointer(
+                slot_id as usize,
+                self.device_contexts.as_ptr_32(slot_id as usize) as u64,
+            );
+        }
+        Ok(())
+    }
+
     fn disable_slot(
         &mut self,
         slot_id: u8,
@@ -648,66 +731,11 @@ impl XhcDevice {
                                                 let slot_id = trb.slot_id();
                                                 match self.ports_queue_waiting_for_slot.pop() {
                                                     Some(port_id) => {
-                                                        match output_string!(
-                                                            services,
-                                                            PixelColor::new(128, 0, 0),
-                                                            Vector2::new(0, *height),
-                                                            [
-                                                                b"Successflly enabled "
-                                                                    .to_iter_str(
-                                                                        IterStrFormat::none()
-                                                                    ),
-                                                                slot_id.to_iter_str(
-                                                                    IterStrFormat::none()
-                                                                ),
-                                                                b"-th device slot for "
-                                                                    .to_iter_str(
-                                                                        IterStrFormat::none()
-                                                                    ),
-                                                                port_id.to_iter_str(
-                                                                    IterStrFormat::none()
-                                                                ),
-                                                                b"-th usb port.".to_iter_str(
-                                                                    IterStrFormat::none()
-                                                                ),
-                                                            ]
+                                                        match self.address_device(
+                                                            slot_id, port_id, services, height,
                                                         ) {
                                                             Ok(()) => (),
                                                             Err(()) => return Err(()),
-                                                        }
-                                                        *height += FONT_HEIGHT;
-                                                        self.port_id_of_slot
-                                                            [slot_id as usize - 1] = Some(port_id);
-                                                        let port_speed =
-                                                            self.get_port_speed(port_id);
-                                                        if self.is_context_size_64() {
-                                                            let input_context = self
-                                                                .input_contexts
-                                                                .as_mut_64(slot_id as usize);
-                                                            input_context
-                                                                .set_enable_context(0, true);
-                                                            input_context
-                                                                .set_enable_context(1, true);
-                                                            input_context.set_route_string(0);
-                                                            input_context.set_speed(port_speed);
-                                                            input_context.set_context_entries(1);
-                                                            input_context
-                                                                .set_route_hub_port_number(port_id);
-                                                            self.device_context_base_address_array
-                                                                .register_pointer(
-                                                                    slot_id as usize,
-                                                                    self.device_contexts
-                                                                        .as_ptr_64(slot_id as usize)
-                                                                        as u64,
-                                                                );
-                                                        } else {
-                                                            self.device_context_base_address_array
-                                                                .register_pointer(
-                                                                    slot_id as usize,
-                                                                    self.device_contexts
-                                                                        .as_ptr_32(slot_id as usize)
-                                                                        as u64,
-                                                                );
                                                         }
                                                         if self.ports_queue_waiting_for_slot.count()
                                                             > 0
@@ -726,8 +754,6 @@ impl XhcDevice {
                                                             Ok(()) => (),
                                                             Err(()) => return Err(()),
                                                         }
-                                                        self.port_id_of_slot
-                                                            [slot_id as usize - 1] = None;
                                                     }
                                                 }
                                             }
@@ -749,6 +775,8 @@ impl XhcDevice {
                                                     Err(()) => return Err(()),
                                                 }
                                                 *height += FONT_HEIGHT;
+
+                                                self.port_id_of_slot[slot_id as usize - 1] = None;
                                             }
                                             t => {
                                                 _ = output_string!(
@@ -859,7 +887,50 @@ impl XhcDevice {
         }
         *height += FONT_HEIGHT;
         self.ports_status[port_id as usize - 1] = PortPhase::NotConnected;
+
+        let mut iter = self.port_id_of_slot.iter().enumerate();
+        let slot_id_opt = 'a: loop {
+            match iter.next() {
+                Some((i, port_id_opt)) => {
+                    match port_id_opt {
+                        Some(target_port_id) => {
+                            if *target_port_id == port_id {
+                                break 'a Some(i as u8);
+                            }
+                        },
+                        None => (),
+                    }
+                },
+                None => break 'a None,
+            }
+        };
+        match slot_id_opt {
+            Some(slot_id) => {
+                match &self.device_of_slot[slot_id as usize] {
+                    Some(device) => {
+                        todo!()
+                    },
+                    None => (),
+                }
+                match self
+                    .disable_slot(slot_id as u8, services, height)
+                {
+                    Ok(()) => (),
+                    Err(()) => return Err(()),
+                }
+            },
+            None => (),
+        }
+
         Ok(())
+    }
+
+    fn get_max_packet_size(&self, port_id: u8) -> u16 {
+        match self.get_port_speed(port_id) {
+            PORT_SPEED_SUPER_SPEED => 512,
+            PORT_SPEED_HIGH_SPEED => 64,
+            _ => 8,
+        }
     }
 }
 

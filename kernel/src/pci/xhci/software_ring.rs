@@ -13,7 +13,6 @@ where
     cycle_bit: bool,
     writing_index: usize,
     trbs: SoftwareRingTrbArray<RING_SIZE>,
-    operational_registers: XhcOperationalRegisters,
 }
 
 #[repr(align(0x1000))]
@@ -36,22 +35,16 @@ impl<const RING_SIZE: usize> SoftwareRingManager<RING_SIZE>
 where
     [(); RING_SIZE]:,
 {
-    pub const fn new(operational_registers: XhcOperationalRegisters) -> Self {
+    pub const fn new() -> Self {
         Self {
             cycle_bit: true,
             writing_index: 0,
             trbs: SoftwareRingTrbArray::new(),
-            operational_registers,
         }
     }
 
-    pub fn initialize(&self) {
-        self.operational_registers
-            .set_command_ring_control_register(
-                (self.operational_registers.command_ring_control_register() & 0x30)
-                    + (self.trbs.address() & 0xFFFF_FFFF_FFFF_FFC0)
-                    + if self.cycle_bit { 1 } else { 0 },
-            );
+    pub fn initial_dequeue_pointer(&self) -> u64 {
+        self.trbs.address()
     }
 
     pub fn push(&mut self, val: TransferRequestBlock) {

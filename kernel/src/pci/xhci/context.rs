@@ -1,7 +1,4 @@
-use core::{
-    mem::size_of,
-    ptr::{addr_of, addr_of_mut, slice_from_raw_parts, slice_from_raw_parts_mut},
-};
+use core::mem::size_of;
 
 #[repr(align(0x1000))]
 pub struct DeviceContextBaseAddressArray<const ARRAY_SIZE: usize>
@@ -156,8 +153,20 @@ impl InputContext64 {
         self.slot_context.set_route_hub_port_number(port_id);
     }
 
-    pub fn endpoint_context_mut(&mut self, index: usize, is_direction_in: bool) -> &mut EndpointContext64 {
-        &mut self.endpoint_contexts[if index == 0 { 1 } else { if is_direction_in { index * 2 } else { index * 2 + 1 } }]
+    pub fn endpoint_context_mut(
+        &mut self,
+        index: usize,
+        is_direction_in: bool,
+    ) -> &mut EndpointContext64 {
+        &mut self.endpoint_contexts[if index == 0 {
+            1
+        } else {
+            if is_direction_in {
+                index * 2
+            } else {
+                index * 2 + 1
+            }
+        }]
     }
 }
 
@@ -226,6 +235,18 @@ pub struct EndpointContext64 {
     data: [u64; 8],
 }
 impl EndpointContext64 {
+    pub fn set_mult(&mut self, mult: u8) {
+        self.data[0] = (self.data[0] & 0xFFFF_FFFF_FF00_FFFE) + ((mult as u64 & 0x3) << 8);
+    }
+    pub fn set_max_primary_streams(&mut self, count: u8) {
+        self.data[0] = (self.data[0] & 0xFFFF_FFFF_FF00_FFFE) + ((count as u64 & 0x1F) << 10);
+    }
+    pub fn set_interval(&mut self, interval: u8) {
+        self.data[0] = (self.data[0] & 0xFFFF_FFFF_FF00_FFFE) + ((interval as u64) << 16);
+    }
+    pub fn set_error_count(&mut self, count: u8) {
+        self.data[1] = (self.data[1] & 0xFFFF_FFFF_FF00_FFFE) + ((count as u64 & 0x3) << 1);
+    }
     pub fn set_endpoint_type(&mut self, r#type: u8) {
         self.data[1] = (self.data[1] & 0xFFFF_FFFF_FFFF_FFC7) + ((r#type as u64 & 0x7) << 3);
     }
@@ -237,5 +258,9 @@ impl EndpointContext64 {
     }
     pub fn initialize_dequeue_cycle_state(&mut self) {
         self.data[2] = (self.data[2] & 0xFFFF_FFFF_FFFF_FFFE) + 1;
+    }
+    pub fn set_dequeue_pointer(&mut self, address: u64) {
+        self.data[2] = (self.data[2] & 0xFFFF_FFFF_0000_000F) + (address & 0xFFFF_FFF0);
+        self.data[3] = address >> 32;
     }
 }
