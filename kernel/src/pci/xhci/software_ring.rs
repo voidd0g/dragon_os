@@ -1,6 +1,6 @@
 use super::{
     transfer_request_block::{
-        typed_transfer_request_block::{link_trb::LinkTrb, OutgoingTypedTransferRequestBlock},
+        typed_transfer_request_block::{link_trb::LinkTrb, CommandRingTypedTransferRequestBlock},
         TransferRequestBlock, TrbArray,
     },
     XhcOperationalRegisters,
@@ -54,8 +54,11 @@ where
             self.trbs.put_trb(
                 self.writing_index,
                 self.cycle_bit,
-                OutgoingTypedTransferRequestBlock::LinkTrb(LinkTrb::new(self.trbs.address(), true))
-                    .into_transfer_request_block(),
+                CommandRingTypedTransferRequestBlock::LinkTrb(LinkTrb::new(
+                    self.trbs.address(),
+                    true,
+                ))
+                .into_transfer_request_block(),
             );
             self.cycle_bit = !self.cycle_bit;
             self.writing_index = 0;

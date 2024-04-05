@@ -31,9 +31,9 @@ use self::{
             address_device_command_trb::AddressDeviceCommandTrb,
             command_completion_event_trb::COMMAND_COMPLETION_CODE_SUCCESS,
             disable_slot_command_trb::DisableSlotCommandTrb,
-            enable_slot_command_trb::EnableSlotCommandTrb, IncomingTypedTransferRequestBlock,
-            OutgoingTypedTransferRequestBlock, TRB_TYPE_ID_DISABLE_SLOT_COMMAND,
-            TRB_TYPE_ID_ENABLE_SLOT_COMMAND,
+            enable_slot_command_trb::EnableSlotCommandTrb, CommandRingTypedTransferRequestBlock,
+            EventRingTypedTransferRequestBlock, TRB_TYPE_ID_ADDRESS_DEVICE_COMMAND,
+            TRB_TYPE_ID_DISABLE_SLOT_COMMAND, TRB_TYPE_ID_ENABLE_SLOT_COMMAND,
         },
         TransferRequestBlock,
     },
@@ -67,11 +67,11 @@ impl PortStatus {
 
 const MAX_DEVICE_SLOTS_DESIRED: u8 = 8;
 const COMMAND_RING_SIZE: usize = 32;
-const TRANSFER_RING_SIZE: usize = 32;
 const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT: u16 = 1;
 const PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE: u16 = 64;
 const MAX_PORT_POSSIBLE: u8 = 255;
 pub struct XhcDevice {
+    base_address: u64,
     capability_registers: XhcCapabilityRegisters,
     operational_registers: XhcOperationalRegisters,
     device_context_base_address_array:
@@ -81,14 +81,10 @@ pub struct XhcDevice {
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_SIZE,
         PRIMARY_INTERRUPTER_EVENT_RING_SEGMENT_COUNT,
     >,
-    default_control_pipe_transfer_rings:
-        [SoftwareRingManager<TRANSFER_RING_SIZE>; MAX_DEVICE_SLOTS_DESIRED as usize],
-    runtime_registers: XhcRuntimeRegisters,
     doorbell_registers: XhcDoorbellRegisters,
-    ports_status: [PortPhase; MAX_PORT_POSSIBLE as usize],
+    ports_phase: [PortPhase; MAX_PORT_POSSIBLE as usize],
     device_contexts: DeviceContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
     input_contexts: InputContexts<{ MAX_DEVICE_SLOTS_DESIRED as usize }>,
-    port_id_of_slot: [Option<u8>; MAX_DEVICE_SLOTS_DESIRED as usize],
     device_of_slot: [Option<Device>; MAX_DEVICE_SLOTS_DESIRED as usize],
     ports_queue_waiting_for_slot: FixedSizePortQueue<{ MAX_PORT_POSSIBLE as usize }>,
 }
@@ -151,13 +147,11 @@ impl XhcDevice {
         let operational_registers_offset = capability_registers.capability_register_length();
         let runtime_registers_offset = capability_registers.runtime_register_space_offset();
         let doorbell_registers_offset = capability_registers.doorbell_offset();
-        const PORTS_STATUS_RESET_VALUE: PortPhase = PortPhase::NotConnected;
-        const DEFAULT_CONTROL_PIPE_TRANSFER_RING_RESET_VALUE: SoftwareRingManager<
-            TRANSFER_RING_SIZE,
-        > = SoftwareRingManager::new();
+        const PORT_PHASE_RESET_VALUE: PortPhase = PortPhase::NotConnected;
         const DEVICE_OF_SLOT_RESET_VALUE: Option<Device> = None;
 
         Self {
+            base_address,
             capability_registers,
             operational_registers: XhcOperationalRegisters::new(
                 base_address + operational_registers_offset as u64,
@@ -168,18 +162,12 @@ impl XhcDevice {
                 XhcRuntimeRegisters::new(base_address + runtime_registers_offset as u64)
                     .get_interrupter_register_set(0),
             ),
-            default_control_pipe_transfer_rings: [DEFAULT_CONTROL_PIPE_TRANSFER_RING_RESET_VALUE;
-                MAX_DEVICE_SLOTS_DESIRED as usize],
-            runtime_registers: XhcRuntimeRegisters::new(
-                base_address + runtime_registers_offset as u64,
-            ),
             doorbell_registers: XhcDoorbellRegisters::new(
                 base_address + doorbell_registers_offset as u64,
             ),
-            ports_status: [PORTS_STATUS_RESET_VALUE; MAX_PORT_POSSIBLE as usize],
+            ports_phase: [PORT_PHASE_RESET_VALUE; MAX_PORT_POSSIBLE as usize],
             device_contexts: DeviceContexts::new(),
             input_contexts: InputContexts::new(),
-            port_id_of_slot: [None; MAX_DEVICE_SLOTS_DESIRED as usize],
             device_of_slot: [DEVICE_OF_SLOT_RESET_VALUE; MAX_DEVICE_SLOTS_DESIRED as usize],
             ports_queue_waiting_for_slot: FixedSizePortQueue::new(),
         }
@@ -431,7 +419,7 @@ impl XhcDevice {
             Ok(()) => (),
             Err(()) => return Err(()),
         }
-        self.ports_status[index as usize - 1] = PortPhase::EnablingSlot;
+        self.ports_phase[index as usize - 1] = PortPhase::EnablingSlot;
         if self.ports_queue_waiting_for_slot.count == 1 {
             match self.enable_slot(services, height) {
                 Ok(()) => (),
@@ -449,7 +437,7 @@ impl XhcDevice {
     ) -> Result<(), ()> {
         let port_status = self.get_port_status(index);
         let mut to_reset = false;
-        match self.ports_status[index as usize - 1] {
+        match self.ports_phase[index as usize - 1] {
             PortPhase::NotConnected => {
                 if port_status.is_connected() {
                     match output_string!(
@@ -472,7 +460,7 @@ impl XhcDevice {
                         }
                     } else {
                         to_reset = true;
-                        self.ports_status[index as usize - 1] = PortPhase::ResettingPort;
+                        self.ports_phase[index as usize - 1] = PortPhase::ResettingPort;
                         match output_string!(
                             services,
                             PixelColor::new(128, 0, 0),
@@ -539,7 +527,7 @@ impl XhcDevice {
                     }
                 }
             }
-            PortPhase::HasSlot => {
+            PortPhase::SlotEnabled => {
                 if !port_status.is_connected() {
                     match self.disconnected_port(index, services, height) {
                         Ok(()) => (),
@@ -598,7 +586,7 @@ impl XhcDevice {
         *height += FONT_HEIGHT;
 
         self.command_ring.push(
-            OutgoingTypedTransferRequestBlock::EnableSlotCommandTrb(EnableSlotCommandTrb::new())
+            CommandRingTypedTransferRequestBlock::EnableSlotCommandTrb(EnableSlotCommandTrb::new())
                 .into_transfer_request_block(),
         );
 
@@ -630,7 +618,14 @@ impl XhcDevice {
             Err(()) => return Err(()),
         }
         *height += FONT_HEIGHT;
-        self.port_id_of_slot[slot_id as usize - 1] = Some(port_id);
+        self.device_of_slot[slot_id as usize - 1] = Some(Device::new(
+            port_id,
+            slot_id,
+            XhcDoorbellRegisters::new(
+                self.base_address + self.capability_registers.doorbell_offset() as u64,
+            ),
+        ));
+        let device = self.device_of_slot[slot_id as usize - 1].as_ref().unwrap();
         let port_speed = self.get_port_speed(port_id);
         let max_packet_size = self.get_max_packet_size(port_id);
         if self.is_context_size_64() {
@@ -647,10 +642,8 @@ impl XhcDevice {
             default_control_pipe_endpoint_context.set_max_packet_size(max_packet_size);
             default_control_pipe_endpoint_context.set_max_burst_size(0);
             default_control_pipe_endpoint_context.initialize_dequeue_cycle_state();
-            default_control_pipe_endpoint_context.set_dequeue_pointer(
-                self.default_control_pipe_transfer_rings[slot_id as usize]
-                    .initial_dequeue_pointer(),
-            );
+            default_control_pipe_endpoint_context
+                .set_dequeue_pointer(device.initial_dequeue_pointer());
             default_control_pipe_endpoint_context.set_interval(0);
             default_control_pipe_endpoint_context.set_max_primary_streams(0);
             default_control_pipe_endpoint_context.set_mult(0);
@@ -661,7 +654,7 @@ impl XhcDevice {
             );
 
             self.command_ring.push(
-                OutgoingTypedTransferRequestBlock::AddressDeviceCommandTrb(
+                CommandRingTypedTransferRequestBlock::AddressDeviceCommandTrb(
                     AddressDeviceCommandTrb::new(
                         self.input_contexts.as_ptr_64(slot_id as usize) as u64,
                         slot_id,
@@ -690,7 +683,11 @@ impl XhcDevice {
             services,
             PixelColor::new(128, 0, 0),
             Vector2::new(0, *height),
-            [b"Enabling slot.".to_iter_str(IterStrFormat::none()),]
+            [
+                b"Disabling .".to_iter_str(IterStrFormat::none()),
+                slot_id.to_iter_str(IterStrFormat::none()),
+                b"-th device slot.".to_iter_str(IterStrFormat::none()),
+            ]
         ) {
             Ok(()) => (),
             Err(()) => return Err(()),
@@ -698,13 +695,37 @@ impl XhcDevice {
         *height += FONT_HEIGHT;
 
         self.command_ring.push(
-            OutgoingTypedTransferRequestBlock::DisableSlotCommandTrb(DisableSlotCommandTrb::new(
-                slot_id,
-            ))
+            CommandRingTypedTransferRequestBlock::DisableSlotCommandTrb(
+                DisableSlotCommandTrb::new(slot_id),
+            )
             .into_transfer_request_block(),
         );
 
         self.doorbell_registers.set(0, 0);
+
+        Ok(())
+    }
+
+    fn initialize_device(
+        &mut self,
+        slot_id: u8,
+        services: &Services,
+        height: &mut u32,
+    ) -> Result<(), ()> {
+        match output_string!(
+            services,
+            PixelColor::new(128, 0, 0),
+            Vector2::new(0, *height),
+            [
+                b"Initializing the device at ".to_iter_str(IterStrFormat::none()),
+                slot_id.to_iter_str(IterStrFormat::none()),
+                b"-th device slot.".to_iter_str(IterStrFormat::none()),
+            ]
+        ) {
+            Ok(()) => (),
+            Err(()) => return Err(()),
+        }
+        *height += FONT_HEIGHT;
 
         Ok(())
     }
@@ -714,10 +735,10 @@ impl XhcDevice {
             match self.primary_interrupter_event_ring.pop() {
                 Some(event) => {
                     let trb_type = event.trb_type();
-                    match IncomingTypedTransferRequestBlock::from_transfer_request_block(event) {
+                    match EventRingTypedTransferRequestBlock::from_transfer_request_block(event) {
                         Ok(trb) => match trb {
-                            IncomingTypedTransferRequestBlock::TransferEventTrb(_) => todo!(),
-                            IncomingTypedTransferRequestBlock::CommandCompletionEventTrb(trb) => {
+                            EventRingTypedTransferRequestBlock::TransferEventTrb(_) => todo!(),
+                            EventRingTypedTransferRequestBlock::CommandCompletionEventTrb(trb) => {
                                 match trb.command_completion_code() {
                                     COMMAND_COMPLETION_CODE_SUCCESS => {
                                         match unsafe {
@@ -776,7 +797,16 @@ impl XhcDevice {
                                                 }
                                                 *height += FONT_HEIGHT;
 
-                                                self.port_id_of_slot[slot_id as usize - 1] = None;
+                                                self.device_of_slot[slot_id as usize - 1] = None;
+                                            }
+                                            TRB_TYPE_ID_ADDRESS_DEVICE_COMMAND => {
+                                                let slot_id = trb.slot_id();
+                                                match self
+                                                    .initialize_device(slot_id, services, height)
+                                                {
+                                                    Ok(()) => (),
+                                                    Err(()) => return Err(()),
+                                                }
                                             }
                                             t => {
                                                 _ = output_string!(
@@ -812,7 +842,7 @@ impl XhcDevice {
                                     }
                                 }
                             }
-                            IncomingTypedTransferRequestBlock::PortStatusChangeEventTrb(trb) => {
+                            EventRingTypedTransferRequestBlock::PortStatusChangeEventTrb(trb) => {
                                 let port_id = trb.port_id();
                                 match self.on_port_status_changed(port_id, services, height) {
                                     Ok(()) => (),
@@ -886,38 +916,26 @@ impl XhcDevice {
             Err(()) => return Err(()),
         }
         *height += FONT_HEIGHT;
-        self.ports_status[port_id as usize - 1] = PortPhase::NotConnected;
+        self.ports_phase[port_id as usize - 1] = PortPhase::NotConnected;
 
-        let mut iter = self.port_id_of_slot.iter().enumerate();
+        let mut iter = self.device_of_slot.iter().enumerate();
         let slot_id_opt = 'a: loop {
             match iter.next() {
-                Some((i, port_id_opt)) => {
-                    match port_id_opt {
-                        Some(target_port_id) => {
-                            if *target_port_id == port_id {
-                                break 'a Some(i as u8);
-                            }
-                        },
-                        None => (),
+                Some((i, device_opt)) => match device_opt {
+                    Some(device) => {
+                        if device.port_id() == port_id {
+                            break 'a Some(i as u8);
+                        }
                     }
+                    None => (),
                 },
                 None => break 'a None,
             }
         };
         match slot_id_opt {
-            Some(slot_id) => {
-                match &self.device_of_slot[slot_id as usize] {
-                    Some(device) => {
-                        todo!()
-                    },
-                    None => (),
-                }
-                match self
-                    .disable_slot(slot_id as u8, services, height)
-                {
-                    Ok(()) => (),
-                    Err(()) => return Err(()),
-                }
+            Some(slot_id) => match self.disable_slot(slot_id as u8, services, height) {
+                Ok(()) => (),
+                Err(()) => return Err(()),
             },
             None => (),
         }

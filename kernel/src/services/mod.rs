@@ -98,11 +98,7 @@ impl<'a> DrawServices<'a> {
         }
     }
 
-    pub fn put_pixel<T: PixelWriter<U>, U: PixelLineWriter>(
-        &self,
-        color: PixelColor,
-        pos: Vector2<usize>,
-    ) -> Result<(), ()> {
+    pub fn put_pixel(&self, color: PixelColor, pos: Vector2<usize>) -> Result<(), ()> {
         put_pixel(
             self.frame_buffer_config.pixels_per_scan_line(),
             self.frame_buffer_config.pixel_format(),
@@ -110,6 +106,18 @@ impl<'a> DrawServices<'a> {
             color,
             pos,
         )
+    }
+
+    pub fn frame_buffer(&self) -> &mut [u8] {
+        self.frame_buffer_config.frame_buffer()
+    }
+
+    pub fn horizontal_resolution(&self) -> u32 {
+        self.frame_buffer_config.horizontal_resolution()
+    }
+
+    pub fn vertical_resolution(&self) -> u32 {
+        self.frame_buffer_config.vertical_resolution()
     }
 
     pub fn put_pixels<T: PixelWriter<U>, U: PixelLineWriter>(&self, pixels: T) -> Result<(), ()> {

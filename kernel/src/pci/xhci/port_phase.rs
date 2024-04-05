@@ -3,5 +3,5 @@ pub enum PortPhase {
     NotConnected,
     ResettingPort,
     EnablingSlot,
-    HasSlot,
+    SlotEnabled,
 }

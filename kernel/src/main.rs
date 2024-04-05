@@ -88,6 +88,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
     let runtime_services = arg.runtime_services();
     let memory_map = arg.memory_map();
     let services = Services::new(frame_buffer_config, runtime_services);
+    let draw_service = services.draw_services();
 
     let memory_manager = BitmapMemoryManager::new(memory_map);
 
@@ -97,12 +98,12 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
 
     let mut height = 0;
 
-    match services.draw_services().put_pixels(DrawRect::new(
+    match draw_service.put_pixels(DrawRect::new(
         PixelColor::new(0, 255, 128),
         Vector2::new(0, 0),
         Vector2::new(
-            frame_buffer_config.horizontal_resolution(),
-            frame_buffer_config.vertical_resolution(),
+            draw_service.horizontal_resolution(),
+            draw_service.vertical_resolution(),
         ),
     )) {
         Ok(()) => (),
@@ -401,7 +402,7 @@ pub extern "sysv64" fn kernel_main_core(arg: *const Argument) -> ! {
         }
     }
 
-    match services.draw_services().put_pixels(DrawRect::new(
+    match draw_service.put_pixels(DrawRect::new(
         PixelColor::new(0, 255, 128),
         Vector2::new(0, 0),
         Vector2::new(

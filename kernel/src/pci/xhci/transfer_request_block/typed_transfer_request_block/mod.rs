@@ -5,6 +5,7 @@ pub mod enable_slot_command_trb;
 pub mod link_trb;
 pub mod port_status_chage_event_trb;
 pub mod transfer_event_trb;
+pub mod setup_stage_trb;
 
 use self::{
     address_device_command_trb::AddressDeviceCommandTrb,
@@ -16,59 +17,68 @@ use self::{
 
 use super::TransferRequestBlock;
 
-pub enum IncomingTypedTransferRequestBlock {
+pub enum EventRingTypedTransferRequestBlock {
     TransferEventTrb(TransferEventTrb),
     CommandCompletionEventTrb(CommandCompletionEventTrb),
     PortStatusChangeEventTrb(PortStatusChangeEventTrb),
 }
 
-impl IncomingTypedTransferRequestBlock {
+impl EventRingTypedTransferRequestBlock {
     pub fn from_transfer_request_block(trb: TransferRequestBlock) -> Result<Self, ()> {
         match trb.trb_type() {
-            TRB_TYPE_ID_TRANSFER_EVENT => Ok(IncomingTypedTransferRequestBlock::TransferEventTrb(
+            TRB_TYPE_ID_TRANSFER_EVENT => Ok(Self::TransferEventTrb(
                 TransferEventTrb::from_transfer_request_block(trb),
             )),
-            TRB_TYPE_ID_COMMAND_COMPLETION_EVENT => Ok(
-                IncomingTypedTransferRequestBlock::CommandCompletionEventTrb(
-                    CommandCompletionEventTrb::from_transfer_request_block(trb),
-                ),
-            ),
-            TRB_TYPE_ID_PORT_STATUS_CHANGE_EVENT => {
-                Ok(IncomingTypedTransferRequestBlock::PortStatusChangeEventTrb(
-                    PortStatusChangeEventTrb::from_transfer_request_block(trb),
-                ))
-            }
+            TRB_TYPE_ID_COMMAND_COMPLETION_EVENT => Ok(Self::CommandCompletionEventTrb(
+                CommandCompletionEventTrb::from_transfer_request_block(trb),
+            )),
+            TRB_TYPE_ID_PORT_STATUS_CHANGE_EVENT => Ok(Self::PortStatusChangeEventTrb(
+                PortStatusChangeEventTrb::from_transfer_request_block(trb),
+            )),
             _ => Err(()),
         }
     }
 }
 
-pub enum OutgoingTypedTransferRequestBlock {
+pub enum CommandRingTypedTransferRequestBlock {
     LinkTrb(LinkTrb),
     EnableSlotCommandTrb(EnableSlotCommandTrb),
     DisableSlotCommandTrb(DisableSlotCommandTrb),
     AddressDeviceCommandTrb(AddressDeviceCommandTrb),
 }
 
-impl OutgoingTypedTransferRequestBlock {
+impl CommandRingTypedTransferRequestBlock {
     pub fn into_transfer_request_block(self) -> TransferRequestBlock {
         match self {
-            OutgoingTypedTransferRequestBlock::LinkTrb(link_trb) => {
-                link_trb.into_transfer_request_block()
-            }
-            OutgoingTypedTransferRequestBlock::EnableSlotCommandTrb(enable_slot_command_trb) => {
+            Self::LinkTrb(link_trb) => link_trb.into_transfer_request_block(),
+            Self::EnableSlotCommandTrb(enable_slot_command_trb) => {
                 enable_slot_command_trb.into_transfer_request_block()
             }
-            OutgoingTypedTransferRequestBlock::DisableSlotCommandTrb(disable_slot_command_trb) => {
+            Self::DisableSlotCommandTrb(disable_slot_command_trb) => {
                 disable_slot_command_trb.into_transfer_request_block()
             }
-            OutgoingTypedTransferRequestBlock::AddressDeviceCommandTrb(
-                address_device_command_trb,
-            ) => address_device_command_trb.into_transfer_request_block(),
+            Self::AddressDeviceCommandTrb(address_device_command_trb) => {
+                address_device_command_trb.into_transfer_request_block()
+            }
         }
     }
 }
 
+pub enum TransferRingTypedTransferRequestBlock {
+    LinkTrb(LinkTrb),
+}
+
+impl TransferRingTypedTransferRequestBlock {
+    pub fn into_transfer_request_block(self) -> TransferRequestBlock {
+        match self {
+            Self::LinkTrb(link_trb) => link_trb.into_transfer_request_block(),
+        }
+    }
+}
+
+pub const TRB_TYPE_ID_SETUP_STAGE: u8 = 2;
+pub const TRB_TYPE_ID_DATA_STAGE: u8 = 3;
+pub const TRB_TYPE_ID_STATUS_STAGE: u8 = 4;
 pub const TRB_TYPE_ID_LINK: u8 = 6;
 pub const TRB_TYPE_ID_ENABLE_SLOT_COMMAND: u8 = 9;
 pub const TRB_TYPE_ID_DISABLE_SLOT_COMMAND: u8 = 10;
