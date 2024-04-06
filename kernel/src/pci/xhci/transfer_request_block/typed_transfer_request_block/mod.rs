@@ -4,15 +4,15 @@ pub mod disable_slot_command_trb;
 pub mod enable_slot_command_trb;
 pub mod link_trb;
 pub mod port_status_chage_event_trb;
-pub mod transfer_event_trb;
 pub mod setup_stage_trb;
+pub mod transfer_event_trb;
 
 use self::{
     address_device_command_trb::AddressDeviceCommandTrb,
     command_completion_event_trb::CommandCompletionEventTrb,
     disable_slot_command_trb::DisableSlotCommandTrb, enable_slot_command_trb::EnableSlotCommandTrb,
     link_trb::LinkTrb, port_status_chage_event_trb::PortStatusChangeEventTrb,
-    transfer_event_trb::TransferEventTrb,
+    setup_stage_trb::SetupStageTrb, transfer_event_trb::TransferEventTrb,
 };
 
 use super::TransferRequestBlock;
@@ -41,7 +41,6 @@ impl EventRingTypedTransferRequestBlock {
 }
 
 pub enum CommandRingTypedTransferRequestBlock {
-    LinkTrb(LinkTrb),
     EnableSlotCommandTrb(EnableSlotCommandTrb),
     DisableSlotCommandTrb(DisableSlotCommandTrb),
     AddressDeviceCommandTrb(AddressDeviceCommandTrb),
@@ -50,7 +49,6 @@ pub enum CommandRingTypedTransferRequestBlock {
 impl CommandRingTypedTransferRequestBlock {
     pub fn into_transfer_request_block(self) -> TransferRequestBlock {
         match self {
-            Self::LinkTrb(link_trb) => link_trb.into_transfer_request_block(),
             Self::EnableSlotCommandTrb(enable_slot_command_trb) => {
                 enable_slot_command_trb.into_transfer_request_block()
             }
@@ -65,13 +63,13 @@ impl CommandRingTypedTransferRequestBlock {
 }
 
 pub enum TransferRingTypedTransferRequestBlock {
-    LinkTrb(LinkTrb),
+    SetupStageTrb(SetupStageTrb),
 }
 
 impl TransferRingTypedTransferRequestBlock {
     pub fn into_transfer_request_block(self) -> TransferRequestBlock {
         match self {
-            Self::LinkTrb(link_trb) => link_trb.into_transfer_request_block(),
+            Self::SetupStageTrb(setup_stage_trb) => setup_stage_trb.into_transfer_request_block(),
         }
     }
 }

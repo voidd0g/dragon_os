@@ -1,9 +1,6 @@
-use super::{
-    transfer_request_block::{
-        typed_transfer_request_block::{link_trb::LinkTrb, CommandRingTypedTransferRequestBlock},
-        TransferRequestBlock, TrbArray,
-    },
-    XhcOperationalRegisters,
+use super::transfer_request_block::{
+    typed_transfer_request_block::{link_trb::LinkTrb, IntoTransferRequestBlock},
+    TransferRequestBlock, TrbArray,
 };
 
 pub struct SoftwareRingManager<const RING_SIZE: usize>
@@ -54,11 +51,7 @@ where
             self.trbs.put_trb(
                 self.writing_index,
                 self.cycle_bit,
-                CommandRingTypedTransferRequestBlock::LinkTrb(LinkTrb::new(
-                    self.trbs.address(),
-                    true,
-                ))
-                .into_transfer_request_block(),
+                LinkTrb::new(self.trbs.address(), true).into_transfer_request_block(),
             );
             self.cycle_bit = !self.cycle_bit;
             self.writing_index = 0;

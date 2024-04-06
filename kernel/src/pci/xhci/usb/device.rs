@@ -1,5 +1,11 @@
 use crate::{
-    pci::xhci::{software_ring::SoftwareRingManager, XhcDoorbellRegisters},
+    pci::xhci::{
+        software_ring::SoftwareRingManager,
+        transfer_request_block::typed_transfer_request_block::{
+            setup_stage_trb::SetupStageTrb, TransferRingTypedTransferRequestBlock,
+        },
+        XhcDoorbellRegisters,
+    },
     services::Services,
 };
 
@@ -37,5 +43,12 @@ impl Device {
 
     pub fn start_initialize(&mut self, services: &Services, height: &mut u32) -> Result<(), ()> {
         Ok(())
+    }
+
+    fn get_descriptor(&mut self, services: &Services, height: &mut u32) -> Result<(), ()> {
+        self.transfer_ring
+            .push(TransferRingTypedTransferRequestBlock::SetupStageTrb(
+                SetupStageTrb::new(request_type, request, value, index, length, transfer_type),
+            ))
     }
 }
